@@ -15,6 +15,9 @@
 #define WINDOW_HEIGHT 800
 #define FONTSIZE 20
 
+#define VIEWPORT_EDITOR 0
+#define VIEWPORT_DISPLAY 1
+
 TTF_Font* global_font = NULL;
 
 void sdl_startup(SDL_Window** win, SDL_Renderer** render){
@@ -95,6 +98,7 @@ int main(){
 
   int win_width, win_height;
   int running = 1;
+  int viewport_active = VIEWPORT_EDITOR;
 
   char text_buffer[512];
   int text_buffer_length = 8;
@@ -119,45 +123,61 @@ int main(){
       if (evt.type == SDL_QUIT){
         goto cleanup;
       }
+      // TODO modal switching!
       
-      // special key input
-      // TODO make use of keydown since sometimes otherwise two events are reported? 
-//      else if (evt.type == SDL_KEYDOWN){
-        // backspace
-      if (evt.type == SDL_KEYDOWN){
-        if (evt.key.keysym.sym == SDLK_BACKSPACE && text_buffer_length > 0){
-          text_buffer[text_buffer_length-1] = '\0';
-          --text_buffer_length;
-          render_text = 1;
-        }
-        // handle copy?
-        else if( evt.key.keysym.sym == SDLK_c && SDL_GetModState() & KMOD_CTRL){
-          printf("copy!\n");
-          ///SDL_SetClipboardText(text_buffer);
-        }
-        //handle paste
-        else if( evt.key.keysym.sym == SDLK_v && SDL_GetModState() & KMOD_CTRL){
-          // text_buffer = SDL_GetClipboardText();
-          //render_text = 1;
-          // TODO need to update length!
-          printf("paste!\n");
-        }
+      if (viewport_active == VIEWPORT_EDITOR){
+        
+        // special key input
+        // TODO make use of keydown since sometimes otherwise two events are reported? 
+        if (evt.type == SDL_KEYDOWN){
+          // backspace
+          if (evt.key.keysym.sym == SDLK_BACKSPACE && text_buffer_length > 0){
+            text_buffer[text_buffer_length-1] = '\0';
+            --text_buffer_length;
+            render_text = 1;
+          }
+          // handle copy?
+          else if( evt.key.keysym.sym == SDLK_c && SDL_GetModState() & KMOD_CTRL){
+            printf("copy!\n");
+            ///SDL_SetClipboardText(text_buffer);
+          }
+          //handle paste
+          else if( evt.key.keysym.sym == SDLK_v && SDL_GetModState() & KMOD_CTRL){
+            // text_buffer = SDL_GetClipboardText();
+            //render_text = 1;
+            // TODO need to update length!
+            printf("paste!\n");
+          }
+          else if (evt.key.keysym.sym == SDLK_e && SDL_GetModState() & KMOD_CTRL){
+            viewport_active = VIEWPORT_DISPLAY;
+            printf("switch to display viewport\n");
+            SDL_StopTextInput();
+          }
 
-      }
+        }
         if( evt.type == SDL_TEXTINPUT){
           // TODO double check not copying or pasting??
           strcat(text_buffer, evt.text.text);
           ++text_buffer_length;
           render_text = 1;
-          printf("typing...\n");
         }
         // TODO handle SDL_TEXTEDITING for a temporary buffer to allow for more complex languages/character sets 
- //    }
+
+      } // viewport editor
+
+      else if (viewport_active == VIEWPORT_DISPLAY){
+        if (evt.key.keysym.sym == SDLK_e && evt.type == SDL_KEYDOWN){
+          viewport_active = VIEWPORT_EDITOR;
+          printf("switch to viewport editor\n");
+          SDL_StartTextInput();
+        }
+        // TODO navigate around the displayed nodes
+      } // viewport display
+
     } // end processing events
 
     // TODO do useful things with the input
     // TODO be able to use keyboard shortcuts!
-
 
     // DRAW
     SDL_GetWindowSize(win, &win_width, &win_height);
