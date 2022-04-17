@@ -1,11 +1,12 @@
-CFLAGS = -O2 -Wall -Wextra
+CFLAGS = -O2 -Wall -Wextra -g
 
 # for Linux
-LIB_BUILTIN = -lSDL2 -lGL -lm -lGLU -lGLEW
-LIB = nuklear.h nuklear_sdl_gl3.h
+LIB_BUILTIN = -lSDL2 -lm -lSDL2_ttf
+LIB = 
 LIBOBJ = 
 
 all: main.bin
+	./main.bin
 
 %.bin: %.o $(LIBOBJ)
 	gcc $< $(CFLAGS) $(LIBOBJ) $(LIB_BUILTIN) -o $@

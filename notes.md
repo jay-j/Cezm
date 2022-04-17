@@ -16,6 +16,7 @@ A scheduling/planning application where the primary output is a 2D map; time x p
 - Load/save files.
 - Super fast edit remap responsiveness
 - Keyboard navigation in the tree, jump back and forth to the json editor. left hand bindings? move with AWSD, hit E to jump to editor side
+- Differnce between the json being edited and the full true json 
 
 # Bonus
 - Group by subsystem instead of by person
@@ -66,6 +67,7 @@ actuator_checkout : {
 - https://github.com/vurtun/nuklear/issues/226
 - specifically `sdl_opengl3` looks fine?
 - how do I change to a nicer font? haha
+- might need too many hacks to get good keyboard controls.. just use plain SDL2 instead? 
  
 ## Format Parsing
 - Use the 'JZON' parser? 

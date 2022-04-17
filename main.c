@@ -17,6 +17,7 @@
 
 #define VIEWPORT_EDITOR 0
 #define VIEWPORT_DISPLAY 1
+#define LINE_MAX_LENGTH 512
 
 TTF_Font* global_font = NULL;
 
@@ -59,6 +60,7 @@ typedef struct TextBox{
 
 
 void sdlj_textbox_render(SDL_Renderer* render, TextBox* textbox, char* text){
+  printf("rendering %s...\n", text);
   if (textbox->texture != NULL){
     SDL_DestroyTexture(textbox->texture);
   }
@@ -78,7 +80,7 @@ void sdlj_textbox_render(SDL_Renderer* render, TextBox* textbox, char* text){
   //textbox->width = surface->w;
   //textbox->height = surface->h;
   TTF_SizeText(global_font, text, &textbox->width, &textbox->height);
-  printf("width: %d (of %d),  height: %d\n", textbox->width, textbox->width_max, textbox->height);
+  // printf("width: %d (of %d),  height: %d\n", textbox->width, textbox->width_max, textbox->height);
 
   SDL_FreeSurface(surface);
 
@@ -104,6 +106,7 @@ int main(){
   int text_buffer_length = 8;
   // initialize with a bunch of 'a's
   memset(text_buffer, 97, text_buffer_length);
+  text_buffer[3] = '\n';
   text_buffer[text_buffer_length] = '\0';
 
   TextBox editor_textbox;
@@ -124,6 +127,9 @@ int main(){
         goto cleanup;
       }
       // TODO modal switching!
+      if (evt.type == SDL_KEYDOWN && evt.key.keysym.sym == SDLK_ESCAPE){
+        goto cleanup;
+      }
       
       if (viewport_active == VIEWPORT_EDITOR){
         
@@ -152,6 +158,11 @@ int main(){
             viewport_active = VIEWPORT_DISPLAY;
             printf("switch to display viewport\n");
             SDL_StopTextInput();
+          }
+          else if (evt.key.keysym.sym == SDLK_RETURN){
+            text_buffer[text_buffer_length] = '\n';
+            ++text_buffer_length;
+            render_text = 1;
           }
 
         }
@@ -194,21 +205,71 @@ int main(){
     viewport_editor.w = WINDOW_WIDTH / 4;
     viewport_editor.h = WINDOW_HEIGHT;
     SDL_RenderSetViewport(render, &viewport_editor);
+    if (viewport_active == VIEWPORT_EDITOR){
+      SDL_SetRenderDrawColor(render, 0xFF, 0xFF, 0xFF, 0xFF);
+    }
+    else{
+      SDL_SetRenderDrawColor(render, 0xE0, 0xE0, 0xE0, 0xFF);
+    }
+    SDL_RenderFillRect(render, &viewport_editor);
+    
+    // text rendering
 
     if (render_text == 1){
       if (text_buffer_length > 0){
-        sdlj_textbox_render(render, &editor_textbox, text_buffer);
+        // figure out how many lines there are to render
+        int text_lines = 1;
+        char* line_start = text_buffer;
+        char* line_end = NULL; 
+        char* text_buffer_end = text_buffer + text_buffer_length;
+        char line[LINE_MAX_LENGTH];
+        int line_height_offset = 0;
+        printf("string to sprint: %s\n", text_buffer);
+        printf("lines to print: \n");
+        while (1){
+          line_end = memchr(line_start, (int) '\n', text_buffer_end - line_start);
+          if (line_end == NULL){
+            line_end = text_buffer_end;
+          }
+
+          // prepare the line to be rendered
+          assert(line_end - line_start < LINE_MAX_LENGTH);
+          memcpy(line, line_start, line_end - line_start);
+          line[line_end - line_start] = '\0';
+
+          // if double enter, then text has zero width and it will lock up TODO
+          
+          // need to just make a big texture, since this has to be SDL_RenderCopy() every frame TODO
+          // https://stackoverflow.com/questions/40886350/how-to-connect-multiple-textures-in-the-one-in-sdl2
+          // https://gamedev.stackexchange.com/questions/46238/rendering-multiline-text-with-sdl-ttf
+
+
+          // render the line!
+          printf("requesting render of: %s\n", line);
+          sdlj_textbox_render(render, &editor_textbox, line);
+          SDL_Rect src = {0, 0, editor_textbox.width, editor_textbox.height};
+          SDL_Rect dst = {0, line_height_offset, editor_textbox.width, editor_textbox.height};
+          assert(SDL_RenderCopy(render, editor_textbox.texture, &src, &dst) == 0);
+          line_height_offset += editor_textbox.height;
+
+          // advance to the next line
+          line_start = line_end + 1;
+          if (line_start >= text_buffer_end){
+            break;
+          }
+
+          ++text_lines;
+          assert(text_lines < 100);
+        }
+        printf("got %d lines of text ------------------------------------\n", text_lines);
+
+        //sdlj_textbox_render(render, &editor_textbox, text_buffer);
       }
       else{
         sdlj_textbox_render(render, &editor_textbox, " ");
       }
     }
-
-    //gPromptTextTexture.render( (viewport_editor.w - gPromptTextTexture.getWidth())/2, 0);
     
-    SDL_Rect src = {0, 0, editor_textbox.width, editor_textbox.height};
-    SDL_Rect dst = {0, 0, editor_textbox.width, editor_textbox.height};
-    assert(SDL_RenderCopy(render, editor_textbox.texture, &src, &dst) == 0);
 //    gInputTextTexture.render( (viewport_editor.w - gInputTextTexture.getWidth())/2, gPromptTextTexture.getHeight());
 
     // SDL_RenderFillRect(render, &fill_rect);
@@ -224,9 +285,14 @@ int main(){
     viewport_display.h = WINDOW_HEIGHT;
     SDL_RenderSetViewport(render, &viewport_display);
 
-    SDL_Rect fill_white = {0, 0, viewport_display.w, viewport_display.h};
-    SDL_SetRenderDrawColor(render, 0x80, 0x80, 0x80, 0xFF);
-    SDL_RenderFillRect(render, &fill_white);
+    SDL_Rect viewport_display_local = {0, 0, viewport_display.w, viewport_display.h};
+    if (viewport_active == VIEWPORT_EDITOR){
+      SDL_SetRenderDrawColor(render, 0x80, 0x80, 0x80, 0xFF);
+    }
+    else{
+      SDL_SetRenderDrawColor(render, 0xFF, 0xFF, 0xFF, 0xFF);
+    }
+    SDL_RenderFillRect(render, &viewport_display_local);
 
     // update screen
     SDL_RenderPresent(render);
