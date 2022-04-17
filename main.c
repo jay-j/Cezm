@@ -60,7 +60,7 @@ typedef struct TextBox{
 
 
 void sdlj_textbox_render(SDL_Renderer* render, TextBox* textbox, char* text){
-  printf("rendering %s...\n", text);
+  //printf("rendering %s...\n", text);
   if (textbox->texture != NULL){
     SDL_DestroyTexture(textbox->texture);
   }
@@ -103,21 +103,35 @@ int main(){
   int viewport_active = VIEWPORT_EDITOR;
 
   char text_buffer[512];
-  int text_buffer_length = 8;
-  // initialize with a bunch of 'a's
-  memset(text_buffer, 97, text_buffer_length);
+  int text_buffer_length = 20;
+  // initialize with a bunch of 'b's
+  memset(text_buffer, 98, text_buffer_length);
   text_buffer[3] = '\n';
+  text_buffer[10] = '\n';
   text_buffer[text_buffer_length] = '\0';
 
   TextBox editor_textbox;
   editor_textbox.color.r = 0; editor_textbox.color.g = 0; editor_textbox.color.b = 0; editor_textbox.color.a = 0xFF;
   editor_textbox.width_max = WINDOW_WIDTH / 4;
 
-  SDL_StartTextInput();
   // causes some overhead. can control with SDL_StopTextInput()
+  SDL_StartTextInput();
+  
+  uint32_t timer_last_loop_start_ms = SDL_GetTicks();
+  uint32_t timer_target_ms = 10;
+  uint32_t timer_last_loop_duration_ms;
 
-  sdlj_textbox_render(render, &editor_textbox, text_buffer);
+  printf("about to start the loop\n");
+
+  //sdlj_textbox_render(render, &editor_textbox, text_buffer);
   while(running == 1){
+    // rate control, delay as much as needed
+    timer_last_loop_duration_ms = SDL_GetTicks() - timer_last_loop_start_ms;
+    if (timer_last_loop_duration_ms < timer_target_ms){
+      SDL_Delay(timer_target_ms - (timer_last_loop_duration_ms));
+    }
+    timer_last_loop_start_ms = SDL_GetTicks();
+
     int render_text = 0;
 
     // INPUT
@@ -162,11 +176,12 @@ int main(){
           else if (evt.key.keysym.sym == SDLK_RETURN){
             text_buffer[text_buffer_length] = '\n';
             ++text_buffer_length;
+            text_buffer[text_buffer_length] = '\0'; // need to nicely terminate for strcat behavior with SDL_TEXTINPUT
             render_text = 1;
           }
 
         }
-        if( evt.type == SDL_TEXTINPUT){
+        else if( evt.type == SDL_TEXTINPUT){
           // TODO double check not copying or pasting??
           strcat(text_buffer, evt.text.text);
           ++text_buffer_length;
@@ -215,17 +230,16 @@ int main(){
     
     // text rendering
 
-    if (render_text == 1){
+    if (1 == 1){ // TODO if (render_text == 1)
       if (text_buffer_length > 0){
         // figure out how many lines there are to render
         int text_lines = 1;
         char* line_start = text_buffer;
         char* line_end = NULL; 
-        char* text_buffer_end = text_buffer + text_buffer_length;
+        char* text_buffer_end = text_buffer + text_buffer_length; 
         char line[LINE_MAX_LENGTH];
         int line_height_offset = 0;
-        printf("string to sprint: %s\n", text_buffer);
-        printf("lines to print: \n");
+
         while (1){
           line_end = memchr(line_start, (int) '\n', text_buffer_end - line_start);
           if (line_end == NULL){
@@ -233,24 +247,25 @@ int main(){
           }
 
           // prepare the line to be rendered
-          assert(line_end - line_start < LINE_MAX_LENGTH);
-          memcpy(line, line_start, line_end - line_start);
-          line[line_end - line_start] = '\0';
+          int line_length = line_end - line_start;
+          assert(line_length < LINE_MAX_LENGTH);
+          memcpy(line, line_start, line_length);
+          line[line_length] = '\0';
 
-          // if double enter, then text has zero width and it will lock up TODO
-          
-          // need to just make a big texture, since this has to be SDL_RenderCopy() every frame TODO
-          // https://stackoverflow.com/questions/40886350/how-to-connect-multiple-textures-in-the-one-in-sdl2
-          // https://gamedev.stackexchange.com/questions/46238/rendering-multiline-text-with-sdl-ttf
+          // don't try to render if it is a blank line. TODO make sure the height gets more offset
+          if (line_start != line_end){
+            
+            // need to just make a big texture, since this has to be SDL_RenderCopy() every frame TODO
+            // https://stackoverflow.com/questions/40886350/how-to-connect-multiple-textures-in-the-one-in-sdl2
+            // https://gamedev.stackexchange.com/questions/46238/rendering-multiline-text-with-sdl-ttf
 
-
-          // render the line!
-          printf("requesting render of: %s\n", line);
-          sdlj_textbox_render(render, &editor_textbox, line);
-          SDL_Rect src = {0, 0, editor_textbox.width, editor_textbox.height};
-          SDL_Rect dst = {0, line_height_offset, editor_textbox.width, editor_textbox.height};
-          assert(SDL_RenderCopy(render, editor_textbox.texture, &src, &dst) == 0);
-          line_height_offset += editor_textbox.height;
+            // render the line!
+            sdlj_textbox_render(render, &editor_textbox, line);
+            SDL_Rect src = {0, 0, editor_textbox.width, editor_textbox.height};
+            SDL_Rect dst = {0, line_height_offset, editor_textbox.width, editor_textbox.height};
+            assert(SDL_RenderCopy(render, editor_textbox.texture, &src, &dst) == 0);
+            line_height_offset += editor_textbox.height;
+          }
 
           // advance to the next line
           line_start = line_end + 1;
@@ -261,7 +276,6 @@ int main(){
           ++text_lines;
           assert(text_lines < 100);
         }
-        printf("got %d lines of text ------------------------------------\n", text_lines);
 
         //sdlj_textbox_render(render, &editor_textbox, text_buffer);
       }
