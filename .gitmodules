@@ -1,0 +1,3 @@
+[submodule "jzon-c"]
+	path = jzon-c
+	url = https://github.com/karl-zylinski/jzon-c.git

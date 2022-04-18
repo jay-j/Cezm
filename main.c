@@ -11,6 +11,8 @@
 #include <SDL2/SDL_image.h>
 #include <SDL2/SDL_ttf.h>
 
+#include "jzon-c/jzon.h"
+
 #define WINDOW_WIDTH 1200
 #define WINDOW_HEIGHT 800
 #define FONTSIZE 20
@@ -123,6 +125,12 @@ int main(){
     ++text_buffer_length;
   } while(*(text_cursor - 1) != EOF);
   fclose(fd);
+  text_buffer[text_buffer_length] = '\0';
+
+
+  // do a test parse of the XML
+  JzonParseResult xml = jzon_parse(text_buffer);
+  assert(xml.ok);
 
   // initialize with a bunch of 'b's
   // memset(text_buffer, 98, text_buffer_length);
@@ -141,7 +149,7 @@ int main(){
   uint32_t timer_target_ms = 10;
   uint32_t timer_last_loop_duration_ms;
 
-  printf("about to start the loop\n");
+  printf("starting main loop!\n");
 
   while(running == 1){
     // rate control, delay as much as needed
@@ -202,6 +210,7 @@ int main(){
         }
         else if( evt.type == SDL_TEXTINPUT){
           // TODO double check not copying or pasting??
+          // TODO fix first new character.. it needs a 
           strcat(text_buffer, evt.text.text);
           ++text_buffer_length;
           render_text = 1;
