@@ -11,17 +11,72 @@
 #include <SDL2/SDL_image.h>
 #include <SDL2/SDL_ttf.h>
 
-#include "jzon-c/jzon.h"
-
 #define WINDOW_WIDTH 1200
 #define WINDOW_HEIGHT 800
-#define FONTSIZE 20
+#define FONTSIZE 16
 
 #define VIEWPORT_EDITOR 0
 #define VIEWPORT_DISPLAY 1
 #define LINE_MAX_LENGTH 512
 
 TTF_Font* global_font = NULL;
+
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+// in edit mode, lock the Activity_Node ids that are being shown in the edit pane.
+// TODO how does this function return information?
+// TODO need to be compatible with replacing portions of the ground truth bigger text
+// or... just modify the full network directly. and then from the full network export the full text
+void node_from_text(char* text_start, size_t text_length){
+  char* text_end = text_start + text_length;
+
+  // assume starting at top level
+
+  // read one line at a time
+  char* line_start = text_start;
+  char* line_end;
+  int line_working_length = 0;
+  while (line_start < text_end){
+    line_end = memchr(line_start, (int) '\n', text_end - line_start);
+    if (line_end == NULL){
+      break;
+    }
+    line_working_length = line_end - line_start;
+    if (line_working_length == 0){
+      ++line_start;
+      continue;
+    }
+
+    if (memchr(line_start, (int) '{', line_working_length) != NULL){
+      printf("line '%.*s' starts an activity, opens up a level\n", line_working_length, line_start);
+    }
+    else if(memchr(line_start, (int) '}', line_working_length) != NULL){
+      printf("line '%.*s' ends an activity, goes down\n", line_working_length, line_start);
+    }
+    else if(memchr(line_start, (int) ':', line_working_length) != NULL){
+      printf("line '%.*s' describes a property\n", line_working_length, line_start);
+      //char* property = strtok_r(line_working, ":", &line_working);
+      //printf("  that property is '%s'\n", property);
+    }
+
+    line_start = line_end + 1;
+  }
+  // text at the top level creates activities with that name
+  // open bracket increases to the next level
+  // text at the next level causes a lookup for a struct member. colon separator
+  // then input type specific. comma to separate list items.
+
+  // TODO add better error handling warning stuff
+}
+
+
+void node_to_text(){
+  // flag to do optioanl stuff? 
+  // how to denote cursor? 
+
+}
+
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -126,17 +181,10 @@ int main(){
   } while(*(text_cursor - 1) != EOF);
   fclose(fd);
   text_buffer[text_buffer_length] = '\0';
+  printf("loaded text of length %d\n", text_buffer_length);
 
-
-  // do a test parse of the XML
-  JzonParseResult xml = jzon_parse(text_buffer);
-  assert(xml.ok);
-
-  // initialize with a bunch of 'b's
-  // memset(text_buffer, 98, text_buffer_length);
-  // text_buffer[3] = '\n';
-  // text_buffer[10] = '\n';
-  // text_buffer[text_buffer_length] = '\0';
+  // do a test parse of the text description
+  node_from_text(text_buffer, text_buffer_length);
 
   TextBox editor_textbox;
   editor_textbox.color.r = 0; editor_textbox.color.g = 0; editor_textbox.color.b = 0; editor_textbox.color.a = 0xFF;
