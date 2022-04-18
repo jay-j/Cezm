@@ -21,6 +21,8 @@
 
 TTF_Font* global_font = NULL;
 
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
 void sdl_startup(SDL_Window** win, SDL_Renderer** render){
 
   if( SDL_Init(SDL_INIT_VIDEO) < 0){
@@ -48,6 +50,9 @@ void sdl_cleanup(SDL_Window* win, SDL_Renderer* render){
   SDL_DestroyWindow(win);
   SDL_Quit();
 }
+
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 
 typedef struct TextBox{
@@ -92,6 +97,10 @@ void sdlj_textbox_render(SDL_Renderer* render, TextBox* textbox, char* text){
 // SDL_RenderCopyEx(render, text_texture, SDL_Rect* clip, SDL_Rect render_quad, angle, center, flip);
 // SDL_RenderCopy(render, text_texture, SDL_Rect* src_rect, SDL_Rect* dst_rect);
 
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+
 int main(){
   // Platform Init Window
   SDL_Window* win;
@@ -102,13 +111,24 @@ int main(){
   int running = 1;
   int viewport_active = VIEWPORT_EDITOR;
 
-  char text_buffer[512];
-  int text_buffer_length = 20;
+  char text_buffer[1024];
+  int text_buffer_length = -1;
+  // TODO temporary just import a demo project file
+  FILE* fd = fopen("examples/demo1.json", "r");
+  assert(fd != NULL);
+  char* text_cursor = text_buffer;
+  do {
+    *text_cursor = fgetc(fd);
+    ++text_cursor;
+    ++text_buffer_length;
+  } while(*(text_cursor - 1) != EOF);
+  fclose(fd);
+
   // initialize with a bunch of 'b's
-  memset(text_buffer, 98, text_buffer_length);
-  text_buffer[3] = '\n';
-  text_buffer[10] = '\n';
-  text_buffer[text_buffer_length] = '\0';
+  // memset(text_buffer, 98, text_buffer_length);
+  // text_buffer[3] = '\n';
+  // text_buffer[10] = '\n';
+  // text_buffer[text_buffer_length] = '\0';
 
   TextBox editor_textbox;
   editor_textbox.color.r = 0; editor_textbox.color.g = 0; editor_textbox.color.b = 0; editor_textbox.color.a = 0xFF;
@@ -123,7 +143,6 @@ int main(){
 
   printf("about to start the loop\n");
 
-  //sdlj_textbox_render(render, &editor_textbox, text_buffer);
   while(running == 1){
     // rate control, delay as much as needed
     timer_last_loop_duration_ms = SDL_GetTicks() - timer_last_loop_start_ms;
@@ -148,7 +167,7 @@ int main(){
       if (viewport_active == VIEWPORT_EDITOR){
         
         // special key input
-        // TODO make use of keydown since sometimes otherwise two events are reported? 
+        // TODO cursor management, underline corner style
         if (evt.type == SDL_KEYDOWN){
           // backspace
           if (evt.key.keysym.sym == SDLK_BACKSPACE && text_buffer_length > 0){
@@ -198,6 +217,8 @@ int main(){
           SDL_StartTextInput();
         }
         // TODO navigate around the displayed nodes
+
+         
       } // viewport display
 
     } // end processing events
