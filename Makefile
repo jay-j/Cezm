@@ -2,7 +2,7 @@ CFLAGS = -O0 -Wall -Wextra -g
 
 # for Linux
 LIB_BUILTIN = -lSDL2 -lm -lSDL2_ttf
-LIB = jzon-c/jzon.h
+LIB = jzon-c/jzon.h schedule.h
 LIBOBJ = jzon-c/jzon.o
 
 all: main.bin

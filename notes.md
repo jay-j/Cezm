@@ -1,6 +1,8 @@
 # The Magic
 A scheduling/planning application where the primary output is a 2D map; time x person-effort. And has clear 'flow' indicators to tie together dependencies.
 - Target user is a small team project, where personnel availability is a tight constraint.
+- Super fast edit remap responsiveness
+- Keyboard navigation in the tree, jump back and forth to the json editor. left hand bindings? move with AWSD, hit E to jump to editor side
 
 # Crucial Features
 - Swoosh dependency indicators.
@@ -14,17 +16,16 @@ A scheduling/planning application where the primary output is a 2D map; time x p
 - Cursor location in the text description is highlighted in the main view display
 - Save file is plaintext; editable by hand, diff and share over git
 - Load/save files.
-- Super fast edit remap responsiveness
-- Keyboard navigation in the tree, jump back and forth to the json editor. left hand bindings? move with AWSD, hit E to jump to editor side
-- Differnce between the json being edited and the full true json 
+- Difference between the json being edited and the full true json 
 
 # Bonus
+- Product/part architecture system with nesting
 - Group by subsystem instead of by person
 - Side panel showing auto-calculated properties
 - Side panel showing hints for properties the user could add
+- Hints for certain key values (user, dependent_on, mel_color...)
 - Export huge png option
 - put comments in the code
-- Hints for certain key values (user, dependent_on, mel_color...)
 - Resolution finer than 1 week. Weekend vs. weekday scheduling.
 - Holidays. 
 - Marking of tasks as completed or not 
@@ -32,6 +33,11 @@ A scheduling/planning application where the primary output is a 2D map; time x p
 - zero-duration milestones
 - Resize the various sub-pieces
 - Highlight things that are the same or related to what's under the cursor. Names, dates, dependencies...
+- Derived fields displayed in node focus are editable and change the source.
+- Task groups / summary / rollup tasks; nested tasks. How does this work with partial edit mode? Also display the minimum/common parent information.
+- Auto indenting/formatting of the file.
+- Margin system
+- Diff system - or just rely on git? Or have git UX elements within this system?
 
 # The Format
 Use "hjson":  https://hjson.github.io/
@@ -62,7 +68,7 @@ actuator_checkout : {
 ```
 
 # Pieces
-## Nuclear GUI
+## Nuklear GUI
 - This is not really the whole piece. Need to pick some other platform specific libraries? Try to SDL, since it is portable.
 - https://github.com/vurtun/nuklear/issues/226
 - specifically `sdl_opengl3` looks fine?
@@ -71,4 +77,20 @@ actuator_checkout : {
  
 ## Format Parsing
 - Use the 'JZON' parser? 
-- 
+
+# Memory Conops
+Allocate an array of Task_Node.
+keep a counter for how many total are used; if exceeding the limit then grow allocation a lot
+each node tracks whether it is in use or not. de-allocating a node is as simple as writing that that node is no longer in use?
+
+create in sequential order? maybe there is a last_node_created_id tracker so that you can start guessing forwards from there. 
+
+but need an efficient way to turn names into ids? use a hash table... punch in id, at location in hash table is stored index of where this thing is in memory?
+
+what  is lifecycle of an activity vs. editing it? 
+if/how to handle name changes?
+treat as a breaking change; node created and deleted. have a special key for when renaming is desired. 
+so anticipate create/delete  ops on nodes once per character entry even; definitely don't want to 
+
+so then for each instant node creation need to go back into display mode to see the effect on schedule? NO, WANT INSTANT FEEDBACK!
+auto create closing brackets so instant parsing doesn't get as screwed up?

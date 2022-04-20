@@ -6,10 +6,13 @@
 #include <string.h>
 #include <assert.h>
 #include <time.h>
+#include <ctype.h> // for isalnum()
 
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_image.h>
 #include <SDL2/SDL_ttf.h>
+
+#include "schedule.h"
 
 #define WINDOW_WIDTH 1200
 #define WINDOW_HEIGHT 800
@@ -21,8 +24,57 @@
 
 TTF_Font* global_font = NULL;
 
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+// the main table of all tasks
+Task_Node* tasks;
+uint64_t task_allocation_used = 0;
+uint64_t task_allocation_total = 128;
+uint64_t task_last_created = 0;
+
+
+void tasks_init(){
+  tasks = (Task_Node*) malloc(task_allocation_total * sizeof(Task_Node));
+}
+
+
+void tasks_free(){
+  free(tasks);
+}
+
+
+// grow memory as needed to hold allocated tasks
+// don't shrink - avoid having to search and move active nodes into lower memory space in realtime
+// if needed user could save and restart to reduce memory footprint
+void task_memory_management(){
+  if (task_allocation_used >= task_allocation_total){
+    task_allocation_total *= 1.5;
+    tasks = (Task_Node*) realloc(tasks, task_allocation_total * sizeof(Task_Node));
+  }
+}
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+char* string_strip(int* result_length, char* str, int str_length){
+  // look at the front, cut off bad characters
+  char* result = str; 
+  *result_length = str_length;
+  while (isalnum(result[0]) == 0){
+    ++result;
+    *result_length -= 1;
+    assert(*result_length > 0);
+  }
+
+  // seek to the end, search backwards to cut off bad characters
+  char* end = result + *result_length - 1;
+  while (isalnum(end[0]) == 0){
+    --end;
+    *result_length -= 1;
+    assert(*result_length > 0);
+  }
+
+  return result;
+}
 
 // in edit mode, lock the Activity_Node ids that are being shown in the edit pane.
 // TODO how does this function return information?
@@ -49,15 +101,18 @@ void node_from_text(char* text_start, size_t text_length){
     }
 
     if (memchr(line_start, (int) '{', line_working_length) != NULL){
-      printf("line '%.*s' starts an activity, opens up a level\n", line_working_length, line_start);
+      // name is text with exterior spaces, brackets stripped out
+      int task_name_length;
+      char* task_name = string_strip(&task_name_length, line_start, line_working_length);
+      printf("NEW TASK, name '%.*s'\n", task_name_length, task_name);
     }
     else if(memchr(line_start, (int) '}', line_working_length) != NULL){
-      printf("line '%.*s' ends an activity, goes down\n", line_working_length, line_start);
+      printf("line '%.*s' ends a task\n", line_working_length, line_start);
     }
     else if(memchr(line_start, (int) ':', line_working_length) != NULL){
       printf("line '%.*s' describes a property\n", line_working_length, line_start);
-      //char* property = strtok_r(line_working, ":", &line_working);
-      //printf("  that property is '%s'\n", property);
+      // split line into sections: property vs. values. split on ':'
+      // parse values. split on ','
     }
 
     line_start = line_end + 1;
@@ -185,6 +240,8 @@ int main(){
 
   // do a test parse of the text description
   node_from_text(text_buffer, text_buffer_length);
+
+  tasks_init();
 
   TextBox editor_textbox;
   editor_textbox.color.r = 0; editor_textbox.color.g = 0; editor_textbox.color.b = 0; editor_textbox.color.a = 0xFF;
@@ -411,6 +468,7 @@ int main(){
 
   cleanup:
   sdl_cleanup(win, render);
+  tasks_free();
 
  return 0;
 }
