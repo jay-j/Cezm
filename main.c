@@ -24,6 +24,8 @@
 
 TTF_Font* global_font = NULL;
 
+#define EDITOR_BUFFER_LENGTH 1024
+
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 // the main table of all tasks
@@ -223,7 +225,7 @@ int main(){
   int running = 1;
   int viewport_active = VIEWPORT_EDITOR;
 
-  char text_buffer[1024];
+  char text_buffer[EDITOR_BUFFER_LENGTH];
   int text_buffer_length = -1;
   // TODO temporary just import a demo project file
   FILE* fd = fopen("examples/demo1.json", "r");
@@ -308,19 +310,29 @@ int main(){
           else if (evt.key.keysym.sym == SDLK_RETURN){
             text_buffer[text_buffer_length] = '\n';
             ++text_buffer_length;
-            text_buffer[text_buffer_length] = '\0'; // need to nicely terminate for strcat behavior with SDL_TEXTINPUT
             render_text = 1;
           }
 
         }
         else if( evt.type == SDL_TEXTINPUT){
+          assert(text_buffer_length < EDITOR_BUFFER_LENGTH);
           // TODO double check not copying or pasting??
           // TODO fix first new character.. it needs a 
-          strcat(text_buffer, evt.text.text);
+          text_buffer[text_buffer_length] = evt.text.text[0];
           ++text_buffer_length;
           render_text = 1;
+
+          // auto insert close brackets
+          if (evt.text.text[0] == '{'){
+            text_buffer[text_buffer_length] = '}';
+            ++text_buffer_length;
+          }
+
         }
-        // TODO handle SDL_TEXTEDITING for a temporary buffer to allow for more complex languages/character sets 
+        else if(evt.type == SDL_TEXTEDITING){
+          // TODO handle SDL_TEXTEDITING for a temporary buffer to allow for more complex languages/character sets 
+          assert(0);
+        }
 
       } // viewport editor
 
