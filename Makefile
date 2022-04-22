@@ -2,14 +2,11 @@ CFLAGS = -O0 -Wall -Wextra -g
 
 # for Linux
 LIB_BUILTIN = -lSDL2 -lm -lSDL2_ttf
-LIB = jzon-c/jzon.h schedule.h
-LIBOBJ = jzon-c/jzon.o
+LIB =  schedule.h utilities-c/hash_lib/hashtable.h
+LIBOBJ = utilities-c/hash_lib/hashtable.o
 
 all: main.bin
 	./main.bin
-
-testjzon: jzon-c/test.bin
-	./jzon-c/test.bin
 
 %.bin: %.o $(LIBOBJ)
 	gcc $< $(CFLAGS) $(LIBOBJ) $(LIB_BUILTIN) -o $@

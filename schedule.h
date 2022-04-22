@@ -3,17 +3,26 @@
 #define TASK_USERS_MAX 8
 #define TASK_DEPENDENCIES_MAX 64
 
+#define TASK_MODE_TRASH (1)
+#define TASK_MODE_ACTIVE (1<<1)
+#define TASK_MODE_EDIT (1<<2)
+#define TASK_MODE_EDIT_CURSOR (1<<3)
+
 #define SCHEDULE_CONSTRAINT_START (1)
-#define SCHEDULE_CONSTRAINT_DURATION (1<1)
-#define SCHEDULE_CONSTRAINT_END (1<2)
+#define SCHEDULE_CONSTRAINT_DURATION (1<<1)
+#define SCHEDULE_CONSTRAINT_END (1<<2)
 
 // build a crazy hash table out of nodes? name -> id?
 // how to smartly handle renaming? 
 // TODO rename symbol button
 
+// does the Task_Node need to be built of some property struct? 
+// for each property to store information about itself (value vs list, list length, if it is unset, auto-calculated, or user set...)
+
 typedef struct Task_Node{
   uint64_t task_id;
   char* task_name;
+  uint16_t mode; // see TASK_MODE_
 
   uint16_t user_id[TASK_USERS_MAX];
   uint16_t user_qty;
@@ -32,6 +41,9 @@ typedef struct Task_Node{
   // DERIVED VARIABLES BELOW THIS LINE
   uint64_t prerequisites[TASK_DEPENDENCIES_MAX];
   uint16_t prerequisite_qty;
+  
+  // WORKING PROPERTIES
+  // selected by cursor?
 
 } Task_Node;
 

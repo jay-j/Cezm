@@ -13,6 +13,7 @@
 #include <SDL2/SDL_ttf.h>
 
 #include "schedule.h"
+#include "utilities-c/hash_lib/hashtable.h"
 
 #define WINDOW_WIDTH 1200
 #define WINDOW_HEIGHT 800
@@ -34,13 +35,23 @@ uint64_t task_allocation_used = 0;
 uint64_t task_allocation_total = 128;
 uint64_t task_last_created = 0;
 
+HashTable* task_names_ht;
 
 void tasks_init(){
   tasks = (Task_Node*) malloc(task_allocation_total * sizeof(Task_Node));
+  task_names_ht = hash_table_create(4096); // TODO hard code because otherwise trigger frequent re-hash of the whole thing..
+
+  for (size_t i=0; i<task_allocation_total; ++i){
+    tasks[i].mode = TASK_MODE_TRASH;
+  }
+  printf("Task init() complete for %ld tasks\n", task_allocation_total);
 }
 
 
 void tasks_free(){
+  printf("[STATUS] FREEING TASK TABLE\n");
+  hash_table_print(task_names_ht);
+  hash_table_destroy(task_names_ht, HT_KEY);
   free(tasks);
 }
 
@@ -50,9 +61,39 @@ void tasks_free(){
 // if needed user could save and restart to reduce memory footprint
 void task_memory_management(){
   if (task_allocation_used >= task_allocation_total){
+    uint64_t task_allocation_old = task_allocation_total;
     task_allocation_total *= 1.5;
     tasks = (Task_Node*) realloc(tasks, task_allocation_total * sizeof(Task_Node));
+
+    for (size_t i=task_allocation_old; i<task_allocation_total; ++i){
+      tasks[i].mode = TASK_MODE_TRASH;
+    }
   }
+
+  // TODO some way to update has task_names_ht size.. would need to re-index all tasks :(
+}
+
+
+Task_Node* task_create(char* task_name, size_t task_name_length){
+  // find an empty slot to use for the task
+  do {
+    task_last_created = (task_last_created + 1) % task_allocation_total;
+  } while ((tasks[task_last_created].mode & TASK_MODE_TRASH) == 0);
+
+  Task_Node* task = (tasks + task_last_created);
+
+  // zero everything there
+  memset((void*) task, 0, sizeof(Task_Node));
+  task->mode |= TASK_MODE_ACTIVE;
+  
+  // add to hash table
+  char* name = (char*) malloc(task_name_length);
+  memcpy(name, task_name, task_name_length);
+  name[task_name_length] = '\0';
+  hash_table_insert(task_names_ht, name, (void*) task);
+  task->task_name = name;
+
+  return task;
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -82,6 +123,9 @@ char* string_strip(int* result_length, char* str, int str_length){
 // TODO how does this function return information?
 // TODO need to be compatible with replacing portions of the ground truth bigger text
 // or... just modify the full network directly. and then from the full network export the full text
+
+// automatically delete/re-add everything being edited in edit mode? assume all those nodes selected are trashed and revised. 
+// how to balance reparsing everything at 100Hz and only reparsing what is needed? maybe use the cursor to direct efforts? only reparse from scratch the node the cursor is in
 void node_from_text(char* text_start, size_t text_length){
   char* text_end = text_start + text_length;
 
@@ -91,6 +135,7 @@ void node_from_text(char* text_start, size_t text_length){
   char* line_start = text_start;
   char* line_end;
   int line_working_length = 0;
+  Task_Node* task;
   while (line_start < text_end){
     line_end = memchr(line_start, (int) '\n', text_end - line_start);
     if (line_end == NULL){
@@ -104,19 +149,34 @@ void node_from_text(char* text_start, size_t text_length){
 
     if (memchr(line_start, (int) '{', line_working_length) != NULL){
       // name is text with exterior spaces, brackets stripped out
+      // TODO check, prevent duplicate task names
       int task_name_length;
       char* task_name = string_strip(&task_name_length, line_start, line_working_length);
       printf("NEW TASK, name '%.*s'\n", task_name_length, task_name);
+      task = task_create(task_name, task_name_length); // TODO is create the right action? maybe parse and then decide? 
     }
     else if(memchr(line_start, (int) '}', line_working_length) != NULL){
       printf("line '%.*s' ends a task\n", line_working_length, line_start);
     }
     else if(memchr(line_start, (int) ':', line_working_length) != NULL){
-      printf("line '%.*s' describes a property\n", line_working_length, line_start);
-      // split line into sections: property vs. values. split on ':'
-      // parse values. split on ','
+      // split into property and value parts. split on ':'
+      char* split = memchr(line_start, (int) ':', line_working_length);
+      int property_str_length;
+      char* property_str = string_strip(&property_str_length, line_start, split - line_start);
+      int value_str_length;
+      char* value_str = string_strip(&value_str_length, split, line_end - split);
+      // TODO split values on ','
+
+      printf("(task %s) add property='%.*s'  value='%.*s'\n", task->task_name, property_str_length, property_str, value_str_length, value_str);
+
+      // parse.. how to connect parts of struct with strings? 
+      // if strcmp(property_str, "dependent_on") == .... etc. a big huge list of conditionals
+      // then with in each can have custom logic for parsing. lists, dates parsing, string vs numeric values
+
+      // TODO need to track what the cursor is currently editing? 
     }
 
+    // advance to the next line
     line_start = line_end + 1;
   }
   // text at the top level creates activities with that name
@@ -225,6 +285,8 @@ int main(){
   int running = 1;
   int viewport_active = VIEWPORT_EDITOR;
 
+  tasks_init();
+
   char text_buffer[EDITOR_BUFFER_LENGTH];
   int text_buffer_length = -1;
   // TODO temporary just import a demo project file
@@ -243,14 +305,22 @@ int main(){
   // do a test parse of the text description
   node_from_text(text_buffer, text_buffer_length);
 
-  tasks_init();
 
+  // TODO difference between full/raw source and the buffer being shown? need to be able to turn Task_Nodes[] back into text
+  // TODO cursor system
+  // TODO smooth scroll system
+  // TODO error flagging / colors system; live syntax parsing
   TextBox editor_textbox;
   editor_textbox.color.r = 0; editor_textbox.color.g = 0; editor_textbox.color.b = 0; editor_textbox.color.a = 0xFF;
   editor_textbox.width_max = WINDOW_WIDTH / 4;
 
   // causes some overhead. can control with SDL_StopTextInput()
   SDL_StartTextInput();
+
+
+  // TODO display viewport
+  // layout of nodes
+  // navigation among nodes, cursor system, selection system
   
   uint32_t timer_last_loop_start_ms = SDL_GetTicks();
   uint32_t timer_target_ms = 10;
