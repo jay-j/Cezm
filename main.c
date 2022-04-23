@@ -51,6 +51,8 @@ void tasks_init(){
   task_editor_visited = (uint8_t*) malloc(task_allocation_total * sizeof(uint8_t));
   memset(task_editor_visited, 0, task_allocation_total);
   printf("Task init() complete for %ld tasks\n", task_allocation_total);
+
+  status_color_init();
 }
 
 
@@ -140,6 +142,37 @@ char* string_strip(int* result_length, char* str, int str_length){
   return result;
 }
 
+
+void editor_propertyline_parse(Task_Node* task, char* line_start, int line_working_length){
+  char* line_end = line_start + line_working_length;
+  // split into property and value parts. split on ':'
+  char* split = memchr(line_start, (int) ':', line_working_length);
+  int property_str_length;
+  char* property_str = string_strip(&property_str_length, line_start, split - line_start);
+  int value_str_length;
+  char* value_str = string_strip(&value_str_length, split, line_end - split);
+  // TODO split values on ','
+
+  printf("(task %s) add property='%.*s'  value='%.*s'\n", task->task_name, property_str_length, property_str, value_str_length, value_str);
+
+  if (memcmp(property_str, "user", 4) == 0){
+    printf("user property familiar!\n");
+  }
+  else if(memcmp(property_str, "duration", 8) == 0){
+    int duration = atoi(value_str);
+    task->day_duration = duration;
+  }
+  else if(memcmp(property_str, "color", 5) == 0){
+    int color = atoi(value_str);
+    task->status_color = color;
+  }
+  else{
+    printf("[WARNING] PROPERTY %.*s NOT RECOGNIZED\n", property_str_length, property_str);
+  }
+
+}
+ 
+
 // in edit mode, lock the Activity_Node ids that are being shown in the edit pane.
 // TODO how does this function return information?
 // TODO need to be compatible with replacing portions of the ground truth bigger text
@@ -199,15 +232,7 @@ void node_from_text(char* text_start, size_t text_length){
     }
 
     else if(memchr(line_start, (int) ':', line_working_length) != NULL){
-      // split into property and value parts. split on ':'
-      char* split = memchr(line_start, (int) ':', line_working_length);
-      int property_str_length;
-      char* property_str = string_strip(&property_str_length, line_start, split - line_start);
-      int value_str_length;
-      char* value_str = string_strip(&value_str_length, split, line_end - split);
-      // TODO split values on ','
-
-      printf("(task %s) add property='%.*s'  value='%.*s'\n", task->task_name, property_str_length, property_str, value_str_length, value_str);
+      editor_propertyline_parse(task, line_start, line_working_length);
 
       // parse.. how to connect parts of struct with strings? 
       // if strcmp(property_str, "dependent_on") == .... etc. a big huge list of conditionals
@@ -283,7 +308,7 @@ void sdl_cleanup(SDL_Window* win, SDL_Renderer* render){
 
 #define DISPLAY_TASK_SELECTED (1)
 
-void draw_box(SDL_Renderer* render, int x, int y, int flags, char* text){
+void draw_box(SDL_Renderer* render, int x, int y, int flags, Task_Node* task){
 
   int border = 2;
 
@@ -309,7 +334,9 @@ void draw_box(SDL_Renderer* render, int x, int y, int flags, char* text){
 
   
   // draw the base box
-  SDL_SetRenderDrawColor(render, 220, 220, 220, 255); // light grey? 
+  int sc = task->status_color;
+  SDL_SetRenderDrawColor(render, status_colors[sc].r, status_colors[sc].g, status_colors[sc].b, status_colors[sc].a);
+  //SDL_SetRenderDrawColor(render, 220, 220, 220, 255); // light grey? 
   SDL_RenderFillRect(render, &rect);
   
   // draw the text on top
@@ -320,7 +347,7 @@ void draw_box(SDL_Renderer* render, int x, int y, int flags, char* text){
     .a = 0
   };
 
-  SDL_Surface* surface = TTF_RenderText_Blended(global_font, text, text_color);
+  SDL_Surface* surface = TTF_RenderText_Blended(global_font, task->task_name, text_color);
   if (surface == NULL){
     printf("text texture render surface error: %s\n", SDL_GetError());
   }
@@ -332,7 +359,7 @@ void draw_box(SDL_Renderer* render, int x, int y, int flags, char* text){
   SDL_Rect textbox;
   textbox.x = x + border;
   textbox.y = y + border;
-  TTF_SizeText(global_font, text, &textbox.w, &textbox.h);
+  TTF_SizeText(global_font, task->task_name, &textbox.w, &textbox.h);
 
   SDL_Rect src = {0, 0, textbox.w, textbox.h};
   assert(SDL_RenderCopy(render, texture, &src, &textbox) == 0);
@@ -514,8 +541,8 @@ int main(){
 
           // auto insert close brackets
           if (evt.text.text[0] == '{'){
-            text_buffer[text_buffer_length] = '}';
-            ++text_buffer_length;
+            text_buffer[text_buffer_length++] = '\n';
+            text_buffer[text_buffer_length++] = '}';
           }
 
         }
@@ -661,7 +688,7 @@ int main(){
         // TODO need to know the expected width to make sure it doesn't go offscreen? or don't care
         // TODO camera coordinate system; make layout somewhat independent of shown pixels
         // TODO an actual layout engine, show properties of the nodes and such
-        draw_box(render, locx, locy, 0, tasks[n].task_name);
+        draw_box(render, locx, locy, 0, tasks+n);
         locx = locx + 120;
         if (locx > viewport_display.w){
           locx = 10;

@@ -1,7 +1,7 @@
 actuator_build {
   user: Jay
   dependent_on: actuator_design, actuator_review
-  mel_color: 4
+  color: 4
 
   duration: 10
 }
@@ -10,19 +10,19 @@ actuator_checkout {
   user: Jay, Ara
   dependent_on: actuator_build
   duration: 5
-  mel_color: 8
+  color: 8
 }
 
 actuator_design {
   user: Ara
   duration: 10
   fixed_start: 2022-03-14
-  mel_color: 2
+  color: 2
 }
 
 actuator_review {
   user: Jay
   dependent_on: actuator_design
   duration: 1
-  mel_color: 3
+  color: 3
 }

@@ -59,6 +59,56 @@ typedef struct Task_Node{
 
 // hash table lookup map to connect name with pointer?
 
-Task_Node task_node_create();
+SDL_Color status_colors[10];
+void status_color_init(){
+  status_colors[0].r = 150;
+  status_colors[0].g = 150;
+  status_colors[0].b = 150;
 
-void task_node_destroy();
+  status_colors[1].r = 150;
+  status_colors[1].g = 0;
+  status_colors[1].b = 0;
+
+  status_colors[2].r = 255;
+  status_colors[2].g = 0;
+  status_colors[2].b = 0;
+
+  // orange
+  status_colors[3].r = 245;
+  status_colors[3].g = 180;
+  status_colors[3].b = 50;
+
+  // yelllow
+  status_colors[4].r = 245;
+  status_colors[4].g = 230;
+  status_colors[4].b = 70;
+
+  // light green
+  status_colors[5].r = 75;
+  status_colors[5].g = 245;
+  status_colors[5].b = 70;
+
+  // dark green
+  status_colors[6].r = 0;
+  status_colors[6].g = 100;
+  status_colors[6].b = 5;
+
+  // cyan blue
+  status_colors[7].r = 0;
+  status_colors[7].g = 230;
+  status_colors[7].b = 255;
+
+  // dark blue
+  status_colors[8].r = 0;
+  status_colors[8].g = 50;
+  status_colors[8].b = 200;
+
+  // purple
+  status_colors[9].r = 50;
+  status_colors[9].g = 0;
+  status_colors[9].b = 140;
+
+  for (size_t i=0; i<10; ++i){
+    status_colors[i].a = 255;
+  }
+}
