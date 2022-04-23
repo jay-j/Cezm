@@ -35,7 +35,7 @@ TTF_Font* global_font = NULL;
 // the main table of all tasks
 Task_Node* tasks;
 uint64_t task_allocation_used = 0;
-uint64_t task_allocation_total = 16; // 128
+uint64_t task_allocation_total = 128; // 128
 uint64_t task_last_created = 0;
 uint8_t* task_editor_visited;
 
@@ -121,6 +121,7 @@ Task_Node* task_get(char* task_name, int task_name_length){
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+// return NULL, result_length=0 
 char* string_strip(int* result_length, char* str, int str_length){
   // look at the front, cut off bad characters
   char* result = str; 
@@ -128,7 +129,9 @@ char* string_strip(int* result_length, char* str, int str_length){
   while (isalnum(result[0]) == 0){
     ++result;
     *result_length -= 1;
-    assert(*result_length > 0);
+    if (*result_length == 0){
+      return NULL;
+    }
   }
 
   // seek to the end, search backwards to cut off bad characters
@@ -136,14 +139,16 @@ char* string_strip(int* result_length, char* str, int str_length){
   while (isalnum(end[0]) == 0){
     --end;
     *result_length -= 1;
-    assert(*result_length > 0);
+    if (*result_length == 0){
+      return NULL;
+    }
   }
 
   return result;
 }
 
 
-void editor_propertyline_parse(Task_Node* task, char* line_start, int line_working_length){
+void editor_parse_propertyline(Task_Node* task, char* line_start, int line_working_length){
   char* line_end = line_start + line_working_length;
   // split into property and value parts. split on ':'
   char* split = memchr(line_start, (int) ':', line_working_length);
@@ -157,13 +162,29 @@ void editor_propertyline_parse(Task_Node* task, char* line_start, int line_worki
 
   if (memcmp(property_str, "user", 4) == 0){
     printf("user property familiar!\n");
+    // TODO, list comprehension
+    // TODO pointer linking to user list? for relational database kinds of stuff at some other point? 
+  }
+  else if(memcmp(property_str, "dependent_on", 12) == 0){
+    // TODO list comprehension
+    // TODO linking with pointers.. hash lookup stuff
+    // TODO update the quantity of dependents in the list also 
+
   }
   else if(memcmp(property_str, "duration", 8) == 0){
     int duration = atoi(value_str);
     task->day_duration = duration;
+    task->schedule_constraints |= SCHEDULE_CONSTRAINT_DURATION;
+  }
+  else if(memcmp(property_str, "fixed_start", 11) == 0){
+    // TODO date comprehension, storage
+    task->schedule_constraints |= SCHEDULE_CONSTRAINT_START;
   }
   else if(memcmp(property_str, "color", 5) == 0){
     int color = atoi(value_str);
+    if ((color > 9) || (color < 0)){
+      color = 0;
+    }
     task->status_color = color;
   }
   else{
@@ -180,7 +201,7 @@ void editor_propertyline_parse(Task_Node* task, char* line_start, int line_worki
 
 // automatically delete/re-add everything being edited in edit mode? assume all those nodes selected are trashed and revised. 
 // how to balance reparsing everything at 100Hz and only reparsing what is needed? maybe use the cursor to direct efforts? only reparse from scratch the node the cursor is in
-void node_from_text(char* text_start, size_t text_length){
+void editor_parse_text(char* text_start, size_t text_length){
   char* text_end = text_start + text_length;
 
   // assume starting at top level
@@ -232,7 +253,7 @@ void node_from_text(char* text_start, size_t text_length){
     }
 
     else if(memchr(line_start, (int) ':', line_working_length) != NULL){
-      editor_propertyline_parse(task, line_start, line_working_length);
+      editor_parse_propertyline(task, line_start, line_working_length);
 
       // parse.. how to connect parts of struct with strings? 
       // if strcmp(property_str, "dependent_on") == .... etc. a big huge list of conditionals
@@ -446,7 +467,7 @@ int main(){
   printf("loaded text of length %d\n", text_buffer_length);
 
   // do a test parse of the text description
-  node_from_text(text_buffer, text_buffer_length);
+  editor_parse_text(text_buffer, text_buffer_length);
 
 
   // TODO difference between full/raw source and the buffer being shown? need to be able to turn Task_Nodes[] back into text
@@ -456,6 +477,10 @@ int main(){
   TextBox editor_textbox;
   editor_textbox.color.r = 0; editor_textbox.color.g = 0; editor_textbox.color.b = 0; editor_textbox.color.a = 0xFF;
   editor_textbox.width_max = WINDOW_WIDTH / 4;
+  int editor_cursor_pos = text_buffer_length / 2;
+  // TODO calculate 2D x/y cursor position
+  int editor_cursor_pos_x;
+  int editor_cursor_pos_y;
 
   // causes some overhead. can control with SDL_StopTextInput()
   SDL_StartTextInput();
@@ -500,8 +525,14 @@ int main(){
         if (evt.type == SDL_KEYDOWN){
           // backspace
           if (evt.key.keysym.sym == SDLK_BACKSPACE && text_buffer_length > 0){
-            text_buffer[text_buffer_length-1] = '\0';
+            char* text_dst = text_buffer + editor_cursor_pos - 1;
+            char* text_src = text_dst + 1;
+            char* text_end = text_buffer + text_buffer_length;
+            memmove(text_dst, text_src, text_end-text_src); 
+
             --text_buffer_length;
+            text_buffer[text_buffer_length] = '\0';
+            --editor_cursor_pos;
             render_text = 1;
             parse_text = 1;
           }
@@ -509,12 +540,13 @@ int main(){
           else if( evt.key.keysym.sym == SDLK_c && SDL_GetModState() & KMOD_CTRL){
             printf("copy!\n");
             ///SDL_SetClipboardText(text_buffer);
+            // TODO need to have a mark system for effective copying
           }
           //handle paste
           else if( evt.key.keysym.sym == SDLK_v && SDL_GetModState() & KMOD_CTRL){
             // text_buffer = SDL_GetClipboardText();
             //render_text = 1;
-            // TODO need to update length!
+            // TODO need to update length! 
             printf("paste!\n");
           }
           else if (evt.key.keysym.sym == SDLK_e && SDL_GetModState() & KMOD_CTRL){
@@ -523,10 +555,33 @@ int main(){
             SDL_StopTextInput();
           }
           else if (evt.key.keysym.sym == SDLK_RETURN){
-            text_buffer[text_buffer_length] = '\n';
+            // move text to make space for inserting characters
+            // TODO verify adding text at the end
+            char* text_src = text_buffer + editor_cursor_pos;
+            char* text_dst = text_src + 1;
+            char* text_end = text_buffer + text_buffer_length;
+            memmove(text_dst, text_src, text_end - text_src);
+
+            // actually add the character
+            text_buffer[editor_cursor_pos] = '\n';
             ++text_buffer_length;
+            ++editor_cursor_pos;
             render_text = 1;
             parse_text = 1;
+
+            printf("[INSERT] RETURN\n"); 
+          }
+          else if(evt.key.keysym.sym == SDLK_LEFT){
+            if (editor_cursor_pos > 0){
+              --editor_cursor_pos;
+              printf("cursor pos: %d\n", editor_cursor_pos);
+            }
+          }
+          else if(evt.key.keysym.sym == SDLK_RIGHT){
+            if (editor_cursor_pos < text_buffer_length){
+              ++editor_cursor_pos;
+              printf("cursor pos: %d\n", editor_cursor_pos);
+            }
           }
 
         }
@@ -534,16 +589,28 @@ int main(){
           assert(text_buffer_length < EDITOR_BUFFER_LENGTH);
           // TODO double check not copying or pasting??
           // TODO fix first new character.. it needs a 
-          text_buffer[text_buffer_length] = evt.text.text[0];
+
+          // move text to make space for inserting characters
+          // TODO verify adding text at the end
+          char* text_src = text_buffer + editor_cursor_pos;
+          char* text_dst = text_src + 1;
+          char* text_end = text_buffer + text_buffer_length;
+          memmove(text_dst, text_src, text_end - text_src);
+
+          // actually add the character
+          text_buffer[editor_cursor_pos] = evt.text.text[0];
           ++text_buffer_length;
+          ++editor_cursor_pos;
           render_text = 1;
           parse_text = 1;
 
+          /*
           // auto insert close brackets
           if (evt.text.text[0] == '{'){
             text_buffer[text_buffer_length++] = '\n';
             text_buffer[text_buffer_length++] = '}';
           }
+          */
 
         }
         else if(evt.type == SDL_TEXTEDITING){
@@ -570,7 +637,7 @@ int main(){
     // TODO be able to use keyboard shortcuts!
 
     if (parse_text == 1){
-      node_from_text(text_buffer, text_buffer_length);
+      editor_parse_text(text_buffer, text_buffer_length);
     }
 
     // DRAW
@@ -650,7 +717,10 @@ int main(){
       else{
         sdlj_textbox_render(render, &editor_textbox, " ");
       }
-    }
+    } // endif request re-render text
+
+    // TODO render cursor
+
     
 //    gInputTextTexture.render( (viewport_editor.w - gInputTextTexture.getWidth())/2, gPromptTextTexture.getHeight());
 
