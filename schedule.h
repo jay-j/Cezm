@@ -3,10 +3,10 @@
 #define TASK_USERS_MAX 8
 #define TASK_DEPENDENCIES_MAX 64
 
-#define TASK_MODE_TRASH (1)
-#define TASK_MODE_ACTIVE (1<<1)
-#define TASK_MODE_EDIT (1<<2)
-#define TASK_MODE_EDIT_CURSOR (1<<3)
+#define TASK_MODE_EDIT (1<<1)
+#define TASK_MODE_EDIT_CURSOR (1<<2)
+#define TASK_MODE_DISPLAY_SELECTED (1<<3)
+#define TASK_MODE_DISPLAY_CURSOR (1<<4)
 
 #define SCHEDULE_CONSTRAINT_START (1)
 #define SCHEDULE_CONSTRAINT_DURATION (1<<1)
@@ -23,10 +23,12 @@ typedef struct Task_Node{
   uint64_t task_id;
   char* task_name;
   uint16_t mode; // see TASK_MODE_
+  uint8_t trash;
 
   uint16_t user_id[TASK_USERS_MAX];
   uint16_t user_qty;
 
+  // TODO should this instead be pointers to those tasks?
   uint64_t dependents[TASK_DEPENDENCIES_MAX];
   uint16_t dependent_qty;
 
@@ -39,6 +41,7 @@ typedef struct Task_Node{
   uint16_t subsystem_id;
 
   // DERIVED VARIABLES BELOW THIS LINE
+  // TODO should this instead be pointers to those other tasks? 
   uint64_t prerequisites[TASK_DEPENDENCIES_MAX];
   uint16_t prerequisite_qty;
   

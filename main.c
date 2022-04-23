@@ -15,6 +15,9 @@
 #include "schedule.h"
 #include "utilities-c/hash_lib/hashtable.h"
 
+#define FALSE 0
+#define TRUE 1
+
 #define WINDOW_WIDTH 1200
 #define WINDOW_HEIGHT 800
 #define FONTSIZE 16
@@ -32,18 +35,21 @@ TTF_Font* global_font = NULL;
 // the main table of all tasks
 Task_Node* tasks;
 uint64_t task_allocation_used = 0;
-uint64_t task_allocation_total = 128;
+uint64_t task_allocation_total = 16; // 128
 uint64_t task_last_created = 0;
+uint8_t* task_editor_visited;
 
 HashTable* task_names_ht;
 
 void tasks_init(){
   tasks = (Task_Node*) malloc(task_allocation_total * sizeof(Task_Node));
-  task_names_ht = hash_table_create(4096); // TODO hard code because otherwise trigger frequent re-hash of the whole thing..
+  task_names_ht = hash_table_create(4096, HT_FREE_KEY); // TODO hard code because otherwise trigger frequent re-hash of the whole thing..
 
   for (size_t i=0; i<task_allocation_total; ++i){
-    tasks[i].mode = TASK_MODE_TRASH;
+    tasks[i].trash = TRUE;
   }
+  task_editor_visited = (uint8_t*) malloc(task_allocation_total * sizeof(uint8_t));
+  memset(task_editor_visited, 0, task_allocation_total);
   printf("Task init() complete for %ld tasks\n", task_allocation_total);
 }
 
@@ -51,8 +57,9 @@ void tasks_init(){
 void tasks_free(){
   printf("[STATUS] FREEING TASK TABLE\n");
   hash_table_print(task_names_ht);
-  hash_table_destroy(task_names_ht, HT_KEY);
+  hash_table_destroy(task_names_ht);
   free(tasks);
+  free(task_editor_visited);
 }
 
 
@@ -61,12 +68,15 @@ void tasks_free(){
 // if needed user could save and restart to reduce memory footprint
 void task_memory_management(){
   if (task_allocation_used >= task_allocation_total){
+    printf("[CAUTION] TASK MEMORY MANAGEMENT ACTIVATED, INCREASING MEMORY ALLOCATIONS\n");
     uint64_t task_allocation_old = task_allocation_total;
     task_allocation_total *= 1.5;
     tasks = (Task_Node*) realloc(tasks, task_allocation_total * sizeof(Task_Node));
+    task_editor_visited = (uint8_t*) realloc(task_editor_visited, task_allocation_total * sizeof(uint8_t));
 
     for (size_t i=task_allocation_old; i<task_allocation_total; ++i){
-      tasks[i].mode = TASK_MODE_TRASH;
+      tasks[i].trash = TRUE;
+      task_editor_visited[i] = FALSE;
     }
   }
 
@@ -78,13 +88,13 @@ Task_Node* task_create(char* task_name, size_t task_name_length){
   // find an empty slot to use for the task
   do {
     task_last_created = (task_last_created + 1) % task_allocation_total;
-  } while ((tasks[task_last_created].mode & TASK_MODE_TRASH) == 0);
+  } while (tasks[task_last_created].trash == FALSE);
 
   Task_Node* task = (tasks + task_last_created);
 
-  // zero everything there
+  // zero everything there. also brings mode out of trash mode
   memset((void*) task, 0, sizeof(Task_Node));
-  task->mode |= TASK_MODE_ACTIVE;
+  task->trash = FALSE; // TODO just to be sure??
   
   // add to hash table
   char* name = (char*) malloc(task_name_length);
@@ -93,6 +103,17 @@ Task_Node* task_create(char* task_name, size_t task_name_length){
   hash_table_insert(task_names_ht, name, (void*) task);
   task->task_name = name;
 
+  return task;
+}
+
+
+Task_Node* task_get(char* task_name, int task_name_length){
+  // use the hash table to find a pointer to the task based on the string name the user gives
+  // return NULL if the task does not exist and needs to be created
+  char name[128]; // TODO
+  memcpy(name, task_name, task_name_length);
+  name[task_name_length] = '\0';
+  Task_Node* task = (Task_Node*) hash_table_get(task_names_ht, name);
   return task;
 }
 
@@ -131,6 +152,13 @@ void node_from_text(char* text_start, size_t text_length){
 
   // assume starting at top level
 
+  // track difference betweeen seen tasks and expected to see tasks
+  // if you don't see tasks that you expect to.. need to remove those!
+  //memset(task_editor_visited, 0, task_allocation_total);
+  for (size_t i=0; i<task_allocation_total; ++i){
+    task_editor_visited[i] = FALSE;
+  }
+
   // read one line at a time
   char* line_start = text_start;
   char* line_end;
@@ -150,14 +178,26 @@ void node_from_text(char* text_start, size_t text_length){
     if (memchr(line_start, (int) '{', line_working_length) != NULL){
       // name is text with exterior spaces, brackets stripped out
       // TODO check, prevent duplicate task names
+      // figure out the name
       int task_name_length;
       char* task_name = string_strip(&task_name_length, line_start, line_working_length);
-      printf("NEW TASK, name '%.*s'\n", task_name_length, task_name);
-      task = task_create(task_name, task_name_length); // TODO is create the right action? maybe parse and then decide? 
+      printf("TASK, name '%.*s'\n", task_name_length, task_name);
+
+      // now get a pointer to the task
+      task = task_get(task_name, task_name_length);
+      if (task == NULL){
+        task = task_create(task_name, task_name_length); // TODO is create the right action? maybe parse and then decide? 
+      }
+
+      // mark task as visited
+      task_editor_visited[task - tasks] = TRUE;
+      task->mode |= TASK_MODE_EDIT; // TODO this is a hack since this should be set by the DISPLAY VIEWPORT
     }
+
     else if(memchr(line_start, (int) '}', line_working_length) != NULL){
       printf("line '%.*s' ends a task\n", line_working_length, line_start);
     }
+
     else if(memchr(line_start, (int) ':', line_working_length) != NULL){
       // split into property and value parts. split on ':'
       char* split = memchr(line_start, (int) ':', line_working_length);
@@ -183,6 +223,18 @@ void node_from_text(char* text_start, size_t text_length){
   // open bracket increases to the next level
   // text at the next level causes a lookup for a struct member. colon separator
   // then input type specific. comma to separate list items.
+
+  // scrub through tasks, remove any that you expected to see but did not
+  for (size_t i=0; i<task_allocation_total; ++i){
+    if (tasks[i].trash == FALSE){ // if node is NOT trash
+      if (task_editor_visited[i] == FALSE){ // if we did not visit the node this time parsing the text
+        if ((tasks[i].mode & TASK_MODE_EDIT) > 0){ // TODO if this runs so much.. better to have a faster cache lookup?
+          tasks[i].trash = TRUE; 
+          hash_table_remove(task_names_ht, tasks[i].task_name);
+        }
+      }
+    }
+  }
 
   // TODO add better error handling warning stuff
 }
@@ -225,6 +277,70 @@ void sdl_cleanup(SDL_Window* win, SDL_Renderer* render){
   SDL_Quit();
 }
 
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+
+#define DISPLAY_TASK_SELECTED (1)
+
+void draw_box(SDL_Renderer* render, int x, int y, int flags, char* text){
+
+  int border = 2;
+
+  SDL_Rect rect;
+  // upper left corner position
+  rect.x = x; 
+  rect.y = y;
+  // width, height
+  rect.w = 80;
+  rect.h = 40;
+
+  // draw outline if selected
+  if ((flags & DISPLAY_TASK_SELECTED) > 0){
+    SDL_Rect outline;
+    outline.x = x-border;
+    outline.y = y-border;
+    outline.w = rect.w+2*border;
+    outline.h = rect.h+2*border;
+
+    SDL_SetRenderDrawColor(render, 200, 100, 0, 255); // orange
+    SDL_RenderFillRect(render, &outline);
+  }
+
+  
+  // draw the base box
+  SDL_SetRenderDrawColor(render, 220, 220, 220, 255); // light grey? 
+  SDL_RenderFillRect(render, &rect);
+  
+  // draw the text on top
+  SDL_Color text_color = {
+    .r = 0,
+    .g = 0,
+    .b = 0,
+    .a = 0
+  };
+
+  SDL_Surface* surface = TTF_RenderText_Blended(global_font, text, text_color);
+  if (surface == NULL){
+    printf("text texture render surface error: %s\n", SDL_GetError());
+  }
+  assert(surface != NULL);
+
+  SDL_Texture* texture = SDL_CreateTextureFromSurface(render, surface);
+  assert(texture != NULL);
+
+  SDL_Rect textbox;
+  textbox.x = x + border;
+  textbox.y = y + border;
+  TTF_SizeText(global_font, text, &textbox.w, &textbox.h);
+
+  SDL_Rect src = {0, 0, textbox.w, textbox.h};
+  assert(SDL_RenderCopy(render, texture, &src, &textbox) == 0);
+  
+  // TODO find a different way to do this that doesn't involve so much memory alloc and dealloc!!!
+  SDL_FreeSurface(surface);
+  SDL_DestroyTexture(texture);
+}
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -337,6 +453,7 @@ int main(){
     timer_last_loop_start_ms = SDL_GetTicks();
 
     int render_text = 0;
+    int parse_text = 0;
 
     // INPUT
     SDL_Event evt;
@@ -359,6 +476,7 @@ int main(){
             text_buffer[text_buffer_length-1] = '\0';
             --text_buffer_length;
             render_text = 1;
+            parse_text = 1;
           }
           // handle copy?
           else if( evt.key.keysym.sym == SDLK_c && SDL_GetModState() & KMOD_CTRL){
@@ -381,6 +499,7 @@ int main(){
             text_buffer[text_buffer_length] = '\n';
             ++text_buffer_length;
             render_text = 1;
+            parse_text = 1;
           }
 
         }
@@ -391,6 +510,7 @@ int main(){
           text_buffer[text_buffer_length] = evt.text.text[0];
           ++text_buffer_length;
           render_text = 1;
+          parse_text = 1;
 
           // auto insert close brackets
           if (evt.text.text[0] == '{'){
@@ -421,6 +541,10 @@ int main(){
 
     // TODO do useful things with the input
     // TODO be able to use keyboard shortcuts!
+
+    if (parse_text == 1){
+      node_from_text(text_buffer, text_buffer_length);
+    }
 
     // DRAW
     SDL_GetWindowSize(win, &win_width, &win_height);
@@ -516,6 +640,7 @@ int main(){
     viewport_display.h = WINDOW_HEIGHT;
     SDL_RenderSetViewport(render, &viewport_display);
 
+    // background color shows mode select
     SDL_Rect viewport_display_local = {0, 0, viewport_display.w, viewport_display.h};
     if (viewport_active == VIEWPORT_EDITOR){
       SDL_SetRenderDrawColor(render, 0x80, 0x80, 0x80, 0xFF);
@@ -525,10 +650,31 @@ int main(){
     }
     SDL_RenderFillRect(render, &viewport_display_local);
 
-    // update screen
+
+
+    //// DRAW TASK BOXES IN DISPLAY VIEWPORT
+    int locx = 10;
+    int locy = 10;
+
+    for (size_t n=0; n<task_allocation_total; ++n){
+      if (tasks[n].trash == 0){
+        // TODO need to know the expected width to make sure it doesn't go offscreen? or don't care
+        // TODO camera coordinate system; make layout somewhat independent of shown pixels
+        // TODO an actual layout engine, show properties of the nodes and such
+        draw_box(render, locx, locy, 0, tasks[n].task_name);
+        locx = locx + 120;
+        if (locx > viewport_display.w){
+          locx = 10;
+          locy += 100;
+        }
+      }
+    }
+        
+
+    //// UPDATE SCREEN
     SDL_RenderPresent(render);
 
-  }
+  } // while forever
 
 
   // have two panels; left for text, right for display
