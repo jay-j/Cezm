@@ -35,7 +35,7 @@ TTF_Font* global_font = NULL;
 // the main table of all tasks
 Task_Node* tasks;
 uint64_t task_allocation_used = 0;
-uint64_t task_allocation_total = 128; // 128
+uint64_t task_allocation_total = 128;
 uint64_t task_last_created = 0;
 uint8_t* task_editor_visited;
 
@@ -478,9 +478,9 @@ int main(){
   editor_textbox.color.r = 0; editor_textbox.color.g = 0; editor_textbox.color.b = 0; editor_textbox.color.a = 0xFF;
   editor_textbox.width_max = WINDOW_WIDTH / 4;
   int editor_cursor_pos = text_buffer_length / 2;
-  // TODO calculate 2D x/y cursor position
   int editor_cursor_pos_x;
   int editor_cursor_pos_y;
+  // TODO track length of each line in the text buffer, to enable jumps (home, end, up/down arrows...)
 
   // causes some overhead. can control with SDL_StopTextInput()
   SDL_StartTextInput();
@@ -574,13 +574,11 @@ int main(){
           else if(evt.key.keysym.sym == SDLK_LEFT){
             if (editor_cursor_pos > 0){
               --editor_cursor_pos;
-              printf("cursor pos: %d\n", editor_cursor_pos);
             }
           }
           else if(evt.key.keysym.sym == SDLK_RIGHT){
             if (editor_cursor_pos < text_buffer_length){
               ++editor_cursor_pos;
-              printf("cursor pos: %d\n", editor_cursor_pos);
             }
           }
 
@@ -663,7 +661,7 @@ int main(){
     }
     SDL_RenderFillRect(render, &viewport_editor);
     
-    // text rendering
+    // text rendering, and figure out where the cursor is
 
     if (1 == 1){ // TODO if (render_text == 1)
       if (text_buffer_length > 0){
@@ -687,6 +685,36 @@ int main(){
           memcpy(line, line_start, line_length);
           line[line_length] = '\0';
 
+          // cursor drawing!
+          if (viewport_active == VIEWPORT_EDITOR){
+            if ((editor_cursor_pos >= line_start - text_buffer) && (editor_cursor_pos <= line_end - text_buffer)){
+              // draw a shaded background
+              SDL_Rect cursor_line_background = {
+                .x = 0,
+                .y = line_height_offset,
+                .w = viewport_editor.w, 
+                .h = 20
+              }; // TODO need to have a font line height as independent variable!
+              SDL_SetRenderDrawColor(render, 230, 230, 230, 255);
+              SDL_RenderFillRect(render, &cursor_line_background);
+
+              // find the location within the line?
+              // TODO need to reference this to actual glyph widths!!
+              editor_cursor_pos_x = editor_cursor_pos - (line_start - text_buffer);
+              editor_cursor_pos_y = text_lines - 1; // -1 for zero indexing
+
+              SDL_Rect cursor_draw = {
+                .x = editor_cursor_pos_x * 7,
+                .y = line_height_offset,
+                .w = 3,
+                .h = 20
+              };
+              SDL_SetRenderDrawColor(render, 50, 50, 80, 255);
+              SDL_RenderFillRect(render, &cursor_draw);
+
+            } 
+          } // cursor drawing
+
           // don't try to render if it is a blank line. TODO make sure the height gets more offset
           if (line_start != line_end){
             
@@ -701,6 +729,9 @@ int main(){
             assert(SDL_RenderCopy(render, editor_textbox.texture, &src, &dst) == 0);
             line_height_offset += editor_textbox.height;
           }
+          else{ // put gaps where lines are blank
+            line_height_offset += editor_textbox.height; // TODO check validity?? can this variable be unset?
+          }
 
           // advance to the next line
           line_start = line_end + 1;
@@ -714,12 +745,13 @@ int main(){
 
         //sdlj_textbox_render(render, &editor_textbox, text_buffer);
       }
-      else{
+      else{ // empty render if no text is there
         sdlj_textbox_render(render, &editor_textbox, " ");
       }
     } // endif request re-render text
 
-    // TODO render cursor
+
+    //printf("cursor pos: %d (%d, %d)\n", editor_cursor_pos, editor_cursor_pos_x, editor_cursor_pos_y);
 
     
 //    gInputTextTexture.render( (viewport_editor.w - gInputTextTexture.getWidth())/2, gPromptTextTexture.getHeight());
