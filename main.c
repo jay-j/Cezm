@@ -15,6 +15,7 @@
 #include "schedule.h"
 #include "utilities-c/hash_lib/hashtable.h"
 
+// global
 #define FALSE 0
 #define TRUE 1
 
@@ -22,13 +23,17 @@
 #define WINDOW_HEIGHT 800
 #define FONTSIZE 16
 
+// modal switching
 #define VIEWPORT_EDITOR 0
 #define VIEWPORT_DISPLAY 1
-#define LINE_MAX_LENGTH 512
 
+// viewport-editor related
+#define LINE_MAX_LENGTH 512
+#define EDITOR_BUFFER_LENGTH 1024
 TTF_Font* global_font = NULL;
 
-#define EDITOR_BUFFER_LENGTH 1024
+// viewport-display related
+#define DISPLAY_TASK_SELECTED (1)
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -39,11 +44,17 @@ uint64_t task_allocation_total = 128;
 uint64_t task_last_created = 0;
 uint8_t* task_editor_visited;
 
+User* users;
+uint64_t user_allocation_used = 0;
+uint64_t user_allocation_total = 16;
+uint64_t user_last_created = 0;
+
 HashTable* task_names_ht;
+HashTable* users_ht;
 
 void tasks_init(){
   tasks = (Task_Node*) malloc(task_allocation_total * sizeof(Task_Node));
-  task_names_ht = hash_table_create(4096, HT_FREE_KEY); // TODO hard code because otherwise trigger frequent re-hash of the whole thing..
+  task_names_ht = hash_table_create(8192, HT_FREE_KEY); // TODO hard code because otherwise trigger frequent re-hash of the whole thing..
 
   for (size_t i=0; i<task_allocation_total; ++i){
     tasks[i].trash = TRUE;
@@ -53,6 +64,12 @@ void tasks_init(){
   printf("Task init() complete for %ld tasks\n", task_allocation_total);
 
   status_color_init();
+
+  users = (User*) malloc(user_allocation_total * sizeof(User));
+  for (size_t i=0; i<user_allocation_total; ++i){
+    users[i].trash = TRUE;
+  }
+  users_ht = hash_table_create(1024, HT_FREE_KEY);
 }
 
 
@@ -60,8 +77,11 @@ void tasks_free(){
   printf("[STATUS] FREEING TASK TABLE\n");
   hash_table_print(task_names_ht);
   hash_table_destroy(task_names_ht);
+  hash_table_print(users_ht);
+  hash_table_destroy(users_ht); 
   free(tasks);
   free(task_editor_visited);
+  free(users);
 }
 
 
@@ -91,15 +111,16 @@ Task_Node* task_create(char* task_name, size_t task_name_length){
   do {
     task_last_created = (task_last_created + 1) % task_allocation_total;
   } while (tasks[task_last_created].trash == FALSE);
+  ++task_allocation_used;
 
   Task_Node* task = (tasks + task_last_created);
 
   // zero everything there. also brings mode out of trash mode
   memset((void*) task, 0, sizeof(Task_Node));
-  task->trash = FALSE; // TODO just to be sure??
+  task->trash = FALSE;
   
   // add to hash table
-  char* name = (char*) malloc(task_name_length);
+  char* name = (char*) malloc(task_name_length+1);
   memcpy(name, task_name, task_name_length);
   name[task_name_length] = '\0';
   hash_table_insert(task_names_ht, name, (void*) task);
@@ -113,10 +134,60 @@ Task_Node* task_get(char* task_name, int task_name_length){
   // use the hash table to find a pointer to the task based on the string name the user gives
   // return NULL if the task does not exist and needs to be created
   char name[128]; // TODO
+  assert(task_name_length < 128);
   memcpy(name, task_name, task_name_length);
   name[task_name_length] = '\0';
   Task_Node* task = (Task_Node*) hash_table_get(task_names_ht, name);
   return task;
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+void user_memory_management(){
+  if (user_allocation_used >= user_allocation_total){
+    printf("[CAUTION] USER MEMORY MANAGEMENT ACTIVATED, INCREASING MEMORY ALLOCATIONS\n");
+    uint64_t user_allocation_old = user_allocation_total;
+    user_allocation_total *= 1.5;
+    users = (User*) realloc(users, user_allocation_total * sizeof(User));
+
+    for (size_t i=user_allocation_old; i<user_allocation_total; ++i){
+      users[i].trash = TRUE;
+    }
+  }
+}
+
+
+User* user_create(char* user_name, size_t name_length){
+  user_memory_management();
+  // find an empty user slot to use
+  do {
+    user_last_created = (user_last_created + 1) % user_allocation_total;
+  } while(users[user_last_created].trash == FALSE);
+  User* user = users + user_last_created;
+  ++user_allocation_used;
+
+  // zero everything there
+  memset((void*) user, 0, sizeof(User));
+  user->trash = FALSE; 
+
+  char* name = (char*) malloc(name_length+1);
+  memcpy(name, user_name, name_length);
+  name[name_length] = '\0';
+  hash_table_insert(users_ht, name, (void*) user);
+  user->name = name;
+
+  return user;
+}
+
+
+User* user_get(char* user_name, int user_name_length){
+  // use the hash table to find a pointer to the user based on the string given
+  // return NULL if does not exist and needs to be created
+  char name[128]; // TODO
+  memcpy(name, user_name, user_name_length);
+  name[user_name_length] = '\0';
+  User* user = (User*) hash_table_get(users_ht, name);
+  return user;
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -159,11 +230,49 @@ void editor_parse_propertyline(Task_Node* task, char* line_start, int line_worki
   // TODO split values on ','
 
   printf("(task %s) add property='%.*s'  value='%.*s'\n", task->task_name, property_str_length, property_str, value_str_length, value_str);
+  if (value_str_length == 0){
+    return;
+  }
 
   if (memcmp(property_str, "user", 4) == 0){
     printf("user property familiar!\n");
     // TODO, list comprehension
     // TODO pointer linking to user list? for relational database kinds of stuff at some other point? 
+
+    // split on ','
+    char* property_split_start = value_str;
+    char* property_split_end = value_str;
+
+    while(property_split_start < line_end){
+      property_split_end = memchr(property_split_start, (int) ',', line_end - property_split_start);
+      if (property_split_end == NULL){
+        property_split_end = line_end;
+      }
+
+      // parse what you find
+      int value_length;
+      char* value = string_strip(&value_length, property_split_start, property_split_end - property_split_start);
+      User* user = user_get(value, value_length);
+      if (user == NULL){
+        printf("user: '%.*s' NEW!\n", value_length, value);
+        // user = user_create(value, value_length); // TODO actually create this user
+        // TODO problem! this will create and create with every character typed...
+        // track which line the cursor is on? interact with those values differently?
+        // periodic cleanup function? index matters, rely on the structure of the text, there can't be extra users!
+        // mark ones in editor as untrustworthy, check they still exist? 
+        // does this problem also apply to activity names?
+      }
+      else{
+        printf("user: '%.*s'\n", value_length, value);
+      }
+
+      // assign to the task? need to check if it is already there?
+
+
+      property_split_start = property_split_end + 1;
+    }
+
+
   }
   else if(memcmp(property_str, "dependent_on", 12) == 0){
     // TODO list comprehension
@@ -241,6 +350,7 @@ void editor_parse_text(char* text_start, size_t text_length){
       task = task_get(task_name, task_name_length);
       if (task == NULL){
         task = task_create(task_name, task_name_length); // TODO is create the right action? maybe parse and then decide? 
+        printf("created task. allocations: %ld of %ld\n", task_allocation_used, task_allocation_total);
       }
 
       // mark task as visited
@@ -276,11 +386,20 @@ void editor_parse_text(char* text_start, size_t text_length){
       if (task_editor_visited[i] == FALSE){ // if we did not visit the node this time parsing the text
         if ((tasks[i].mode & TASK_MODE_EDIT) > 0){ // TODO if this runs so much.. better to have a faster cache lookup?
           tasks[i].trash = TRUE; 
+          if (task_allocation_used > 0){
+            --task_allocation_used;
+          }
+          printf("REMOVING tasks[%d].name=%s..\n", i, tasks[i].task_name);
           hash_table_remove(task_names_ht, tasks[i].task_name);
         }
       }
     }
   }
+  hash_table_print(task_names_ht);
+  printf("[STATUS] Finished parsing text this round\n");
+
+  // scrub through users, remove any that you expected to see but did not
+
 
   // TODO add better error handling warning stuff
 }
@@ -326,8 +445,6 @@ void sdl_cleanup(SDL_Window* win, SDL_Renderer* render){
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-
-#define DISPLAY_TASK_SELECTED (1)
 
 void draw_box(SDL_Renderer* render, int x, int y, int flags, Task_Node* task){
 
@@ -386,8 +503,8 @@ void draw_box(SDL_Renderer* render, int x, int y, int flags, Task_Node* task){
   assert(SDL_RenderCopy(render, texture, &src, &textbox) == 0);
   
   // TODO find a different way to do this that doesn't involve so much memory alloc and dealloc!!!
-  SDL_FreeSurface(surface);
   SDL_DestroyTexture(texture);
+  SDL_FreeSurface(surface);
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -404,6 +521,8 @@ typedef struct TextBox{
 
 void sdlj_textbox_render(SDL_Renderer* render, TextBox* textbox, char* text){
   //printf("rendering %s...\n", text);
+  // TODO this has a crashing problem... seems to show up if I rapidly edit a single line? or edit over and over and over?
+  // can crash even on a line very different than the long one? but seems to most often show if there is A line long line somewhere
   if (textbox->texture != NULL){
     SDL_DestroyTexture(textbox->texture);
   }
