@@ -3,6 +3,7 @@ A scheduling/planning application where the primary output is a 2D map; time x p
 - Target user is a small team project, where personnel availability is a tight constraint.
 - Super fast edit remap responsiveness
 - Keyboard navigation in the tree, jump back and forth to the json editor. left hand bindings? move with AWSD, hit E to jump to editor side
+- this UX! https://app.code2flow.com/ or http://viz-js.com/
 
 # Crucial Features
 - Swoosh dependency indicators.
@@ -26,7 +27,7 @@ A scheduling/planning application where the primary output is a 2D map; time x p
 - Hints for certain key values (user, dependent_on, mel_color...)
 - Export huge png option
 - put comments in the code
-- Resolution finer than 1 week. Weekend vs. weekday scheduling.
+- Resolution finer than 1 day. Weekend vs. weekday scheduling.
 - Holidays. 
 - Marking of tasks as completed or not 
 - Highlighting critical path
@@ -38,6 +39,7 @@ A scheduling/planning application where the primary output is a 2D map; time x p
 - Auto indenting/formatting of the file.
 - Margin system
 - Diff system - or just rely on git? Or have git UX elements within this system?
+- Tab completion (for users, dependent-on task names..)
 
 # The Format
 Use "hjson":  https://hjson.github.io/
