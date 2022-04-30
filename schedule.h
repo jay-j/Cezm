@@ -53,6 +53,7 @@ typedef struct Task_Node{
 typedef struct User{
   char* name;
   uint8_t trash; 
+  uint8_t mode_edit;
 } User;
 
 // track the quantity of activities created, to just increment forever. don't worry about re-use and abandoning old numbers

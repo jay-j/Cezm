@@ -48,6 +48,7 @@ User* users;
 uint64_t user_allocation_used = 0;
 uint64_t user_allocation_total = 16;
 uint64_t user_last_created = 0;
+uint8_t* user_editor_visited;
 
 HashTable* task_names_ht;
 HashTable* users_ht;
@@ -70,6 +71,8 @@ void tasks_init(){
     users[i].trash = TRUE;
   }
   users_ht = hash_table_create(1024, HT_FREE_KEY);
+  user_editor_visited = (uint8_t*) malloc(user_allocation_total * sizeof(uint8_t));
+  memset(user_editor_visited, 0, user_allocation_total);
 }
 
 
@@ -81,6 +84,7 @@ void tasks_free(){
   hash_table_destroy(users_ht); 
   free(tasks);
   free(task_editor_visited);
+  free(user_editor_visited);
   free(users);
 }
 
@@ -152,6 +156,7 @@ void user_memory_management(){
 
     for (size_t i=user_allocation_old; i<user_allocation_total; ++i){
       users[i].trash = TRUE;
+      user_editor_visited[i] = FALSE;
     }
   }
 }
@@ -255,8 +260,7 @@ void editor_parse_propertyline(Task_Node* task, char* line_start, int line_worki
       User* user = user_get(value, value_length);
       if (user == NULL){
         printf("user: '%.*s' NEW!\n", value_length, value);
-        // user = user_create(value, value_length); // TODO actually create this user
-        // TODO problem! this will create and create with every character typed...
+        user = user_create(value, value_length); // TODO actually create this user
         // track which line the cursor is on? interact with those values differently?
         // periodic cleanup function? index matters, rely on the structure of the text, there can't be extra users!
         // mark ones in editor as untrustworthy, check they still exist? 
@@ -265,6 +269,9 @@ void editor_parse_propertyline(Task_Node* task, char* line_start, int line_worki
       else{
         printf("user: '%.*s'\n", value_length, value);
       }
+      user->trash = FALSE;
+      user->mode_edit = TRUE;
+
 
       // assign to the task? need to check if it is already there?
 
@@ -305,7 +312,6 @@ void editor_parse_propertyline(Task_Node* task, char* line_start, int line_worki
 
 // in edit mode, lock the Activity_Node ids that are being shown in the edit pane.
 // TODO how does this function return information?
-// TODO need to be compatible with replacing portions of the ground truth bigger text
 // or... just modify the full network directly. and then from the full network export the full text
 
 // automatically delete/re-add everything being edited in edit mode? assume all those nodes selected are trashed and revised. 
@@ -399,6 +405,20 @@ void editor_parse_text(char* text_start, size_t text_length){
   printf("[STATUS] Finished parsing text this round\n");
 
   // scrub through users, remove any that you expected to see but did not
+  for (size_t i=0; i<user_allocation_total; ++i){
+    if(users[i].trash == FALSE){
+      if (user_editor_visited[i] == FALSE){
+
+        if (users[i].mode_edit == TRUE){
+          // this user was expected to be seen upon parsing but was not; delete them!!
+          // TODO actually do it
+
+
+        }
+      }
+    }
+
+  }
 
 
   // TODO add better error handling warning stuff
@@ -491,6 +511,7 @@ void draw_box(SDL_Renderer* render, int x, int y, int flags, Task_Node* task){
   }
   assert(surface != NULL);
 
+  // for performance don't want to do this every frame https://forums.libsdl.org/viewtopic.php?t=10303
   SDL_Texture* texture = SDL_CreateTextureFromSurface(render, surface);
   assert(texture != NULL);
 
@@ -750,7 +771,6 @@ int main(){
 
     } // end processing events
 
-    // TODO do useful things with the input
     // TODO be able to use keyboard shortcuts!
 
     if (parse_text == 1){
