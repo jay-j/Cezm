@@ -459,7 +459,7 @@ void sdl_startup(SDL_Window** win, SDL_Renderer** render){
 
   // startup TTF and load in a font
   assert(TTF_Init() != -1);
-  global_font = TTF_OpenFont("Ubuntu-R.ttf", FONTSIZE);
+  global_font = TTF_OpenFont("Hack_Font.ttf", FONTSIZE); // Ubuntu-R
   assert(global_font != NULL);
 }
 
@@ -996,7 +996,7 @@ int main(){
               // editor_cursor_pos_y = text_lines - 1; // -1 for zero indexing
 
               SDL_Rect cursor_draw = {
-                .x = text_cursor->x * 7,
+                .x = text_cursor->x * 10,
                 .y = line_height_offset,
                 .w = 3,
                 .h = 20
