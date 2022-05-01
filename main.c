@@ -631,7 +631,6 @@ void editor_bufffer_destroy(TextBuffer* tb){
 
 
 void editor_find_line_lengths(TextBuffer* tb){
-  printf("=== LINE LENGTH CALCULATOR ===\n");
   char* line_start = tb->text;
   char* line_end = NULL; 
   char* text_buffer_end = tb->text + tb->length;
@@ -647,7 +646,6 @@ void editor_find_line_lengths(TextBuffer* tb){
     }
 
     tb->line_length[tb->lines] = line_end - line_start;
-    printf("line_length[%d]=%d\n", tb->lines, tb->line_length[tb->lines]);
 
     tb->lines += 1;
     line_start = line_end;
@@ -981,7 +979,7 @@ int main(){
 
           // cursor drawing!
           if (viewport_active == VIEWPORT_EDITOR){
-            if ((text_cursor->pos >= line_start - text_buffer->text) && (text_cursor->pos <= line_end - text_buffer->text)){
+            if ((text_cursor->pos >= line_start - text_buffer->text) && (text_cursor->pos < line_end - text_buffer->text)){
               // draw a shaded background
               SDL_Rect cursor_line_background = {
                 .x = 0,
