@@ -592,7 +592,7 @@ void sdlj_textbox_render(SDL_Renderer* render, TextBox* textbox, char* text){
 typedef struct TextBuffer{
   char* text;
   int length;
-  int* line_length;
+  int* line_length; // [pointer to lineA start] + [line_length A] = [pointer to lineB start]
   int lines;
 } TextBuffer;
 
@@ -631,6 +631,7 @@ void editor_bufffer_destroy(TextBuffer* tb){
 
 
 void editor_find_line_lengths(TextBuffer* tb){
+  printf("=== LINE LENGTH CALCULATOR ===\n");
   char* line_start = tb->text;
   char* line_end = NULL; 
   char* text_buffer_end = tb->text + tb->length;
@@ -641,12 +642,15 @@ void editor_find_line_lengths(TextBuffer* tb){
     if (line_end == NULL){
       line_end = text_buffer_end;
     }   
+    else{
+      line_end += 1; // move past the \n
+    }
 
     tb->line_length[tb->lines] = line_end - line_start;
     printf("line_length[%d]=%d\n", tb->lines, tb->line_length[tb->lines]);
 
     tb->lines += 1;
-    line_start = line_end+1;
+    line_start = line_end;
     if (line_end == text_buffer_end){
       break;
     }
@@ -973,7 +977,7 @@ int main(){
           // prepare the line to be rendered
           assert(text_buffer->line_length[line_number] < LINE_MAX_LENGTH);
           memcpy(line, line_start, text_buffer->line_length[line_number]);
-          line[text_buffer->line_length[line_number]] = '\0';
+          line[text_buffer->line_length[line_number]-1] = '\0';
 
           // cursor drawing!
           if (viewport_active == VIEWPORT_EDITOR){
@@ -1006,7 +1010,7 @@ int main(){
           } // cursor drawing
 
           // don't try to render if it is a blank line. TODO make sure the height gets more offset
-          if (line_start != line_end){
+          if (text_buffer->line_length[line_number] > 1){
             
             // need to just make a big texture, since this has to be SDL_RenderCopy() every frame TODO
             // https://stackoverflow.com/questions/40886350/how-to-connect-multiple-textures-in-the-one-in-sdl2
@@ -1024,7 +1028,7 @@ int main(){
           }
 
           // advance to the next line
-          line_start = line_end + 1;
+          line_start = line_end;
           if (line_start >= text_buffer_end){
             break;
           }
