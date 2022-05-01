@@ -30,6 +30,7 @@
 // viewport-editor related
 #define LINE_MAX_LENGTH 512
 #define EDITOR_BUFFER_LENGTH 1024
+#define EDITOR_LINES_MAX 1024
 TTF_Font* global_font = NULL;
 
 // viewport-display related
@@ -196,7 +197,6 @@ User* user_get(char* user_name, int user_name_length){
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
 // return NULL, result_length=0 
 char* string_strip(int* result_length, char* str, int str_length){
   // look at the front, cut off bad characters
@@ -569,6 +569,9 @@ void sdlj_textbox_render(SDL_Renderer* render, TextBox* textbox, char* text){
   assert(surface != NULL);
 
   textbox->texture = SDL_CreateTextureFromSurface(render, surface);
+  if (textbox->texture == NULL){
+    printf("text surface->texture creation erro: %s\n", SDL_GetError());
+  }
   assert(textbox->texture != NULL);
   //SDL_SetTextureBlendMode(textbox->texture, SDL_BlendMode
 
@@ -590,6 +593,137 @@ void sdlj_textbox_render(SDL_Renderer* render, TextBox* textbox, char* text){
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+typedef struct TextBuffer{
+  char* text;
+  int length;
+  int* line_length;
+  int lines;
+} TextBuffer;
+
+typedef struct TextCursor{
+  int pos;
+  int x;
+  int y;
+} TextCursor;
+
+enum TEXTCURSOR_MOVE_DIR {
+  TEXTCURSOR_MOVE_DIR_RIGHT,
+  TEXTCURSOR_MOVE_DIR_LEFT,
+  TEXTCURSOR_MOVE_DIR_UP,
+  TEXTCURSOR_MOVE_DIR_DOWN
+};
+
+
+TextBuffer* editor_buffer_init(){
+  TextBuffer* tb = (TextBuffer*) malloc(sizeof(TextBuffer));
+
+  tb->text = (char*) malloc(EDITOR_BUFFER_LENGTH * sizeof(char));
+  tb->length = 0;
+
+  tb->line_length = (int*) malloc(EDITOR_LINES_MAX * sizeof(*tb->line_length));
+  tb->lines = 0;
+  for (size_t i=0; i<EDITOR_LINES_MAX; ++i){
+    tb->line_length[i] = 0;
+  }
+  return tb;
+}
+
+void editor_bufffer_destroy(TextBuffer* tb){
+  free(tb->text);
+  free(tb->line_length);
+}
+
+
+void editor_find_line_lengths(TextBuffer* tb){
+  char* line_start = tb->text;
+  char* line_end = NULL; 
+  char* text_buffer_end = tb->text + tb->length;
+
+  tb->lines = 0;
+  while (tb->lines < EDITOR_LINES_MAX){
+    line_end = memchr(line_start, (int) '\n', text_buffer_end - line_start);
+    if (line_end == NULL){
+      line_end = text_buffer_end;
+    }   
+
+    tb->line_length[tb->lines] = line_end - line_start;
+    printf("line_length[%d]=%d\n", tb->lines, tb->line_length[tb->lines]);
+
+    tb->lines += 1;
+    line_start = line_end+1;
+    if (line_end == text_buffer_end){
+      break;
+    }
+  }
+
+  for(int i=tb->lines; i<EDITOR_LINES_MAX; ++i){
+    tb->line_length[i] = 0;
+  }
+}
+
+
+void editor_cursor_move(TextBuffer* tb, TextCursor* tc, int movedir){
+  if (movedir == TEXTCURSOR_MOVE_DIR_RIGHT){
+    if (tc->pos < tb->length){
+      // TODO if allowed by length
+      tc->pos += 1;
+      tc->x += 1;
+      
+      // wrap to next line
+      if (tc->x == tb->line_length[tc->y]){
+        tc->x = 0;
+        tc->y += 1;
+      }
+    }
+  }
+  else if (movedir == TEXTCURSOR_MOVE_DIR_LEFT){
+    if (tc->pos > 0){
+      tc->pos -= 1;
+      tc->x -= 1;
+
+      // wrap to previous line
+      if(tc->x - 1 < 0){
+        tc->y -= 1;
+        tc->x = tb->line_length[tc->y] - 1;
+      }
+    }
+  }
+  else if (movedir == TEXTCURSOR_MOVE_DIR_UP){
+    if (tc->y > 0){
+      tc->y -= 1;
+
+      int x_delta = tc->x;
+      // moving on to a shorter line
+      if (tc->x > tb->line_length[tc->y]){
+        tc->x = tb->line_length[tc->y]-1;
+        tc->pos -= x_delta + 1;
+      }
+      // moving onto a longer line
+      else{
+        x_delta += tb->line_length[tc->y] - tc->x;
+        tc->pos -= x_delta; // TODO plus one?
+      }
+    }
+  }
+  else if (movedir == TEXTCURSOR_MOVE_DIR_DOWN){
+    if (tc->y < tb->lines){
+      int x_delta = tb->line_length[tc->y] - tc->x;
+      tc->y += 1;
+
+      // moving onto a shorter line
+      if (tc->x > tb->line_length[tc->y]){
+        tc->x = tb->line_length[tc->y];
+      }
+        
+      tc->pos = x_delta + tc->x;
+    }
+  }
+
+  printf("move(%d): %d = (%d, %d)\n", movedir, tc->pos, tc->x, tc->y);
+
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 int main(){
   // Platform Init Window
@@ -603,23 +737,24 @@ int main(){
 
   tasks_init();
 
-  char text_buffer[EDITOR_BUFFER_LENGTH];
-  int text_buffer_length = -1;
+  TextBuffer* text_buffer = editor_buffer_init();
+
   // TODO temporary just import a demo project file
   FILE* fd = fopen("examples/demo1.json", "r");
   assert(fd != NULL);
-  char* text_cursor = text_buffer;
+  char* text_cursor_loading = text_buffer->text;
   do {
-    *text_cursor = fgetc(fd);
-    ++text_cursor;
-    ++text_buffer_length;
-  } while(*(text_cursor - 1) != EOF);
+    *text_cursor_loading = fgetc(fd);
+    ++text_cursor_loading;
+    text_buffer->length += 1;
+  } while(*(text_cursor_loading - 1) != EOF);
   fclose(fd);
-  text_buffer[text_buffer_length] = '\0';
-  printf("loaded text of length %d\n", text_buffer_length);
+  text_buffer->text[text_buffer->length] = '\0';
+  printf("loaded text of length %d\n", text_buffer->length);
 
   // do a test parse of the text description
-  editor_parse_text(text_buffer, text_buffer_length);
+  editor_parse_text(text_buffer->text, text_buffer->length);
+  editor_find_line_lengths(text_buffer);
 
 
   // TODO difference between full/raw source and the buffer being shown? need to be able to turn Task_Nodes[] back into text
@@ -629,9 +764,15 @@ int main(){
   TextBox editor_textbox;
   editor_textbox.color.r = 0; editor_textbox.color.g = 0; editor_textbox.color.b = 0; editor_textbox.color.a = 0xFF;
   editor_textbox.width_max = WINDOW_WIDTH / 4;
-  int editor_cursor_pos = text_buffer_length / 2;
-  int editor_cursor_pos_x;
-  int editor_cursor_pos_y;
+  editor_textbox.texture = NULL;
+  TextCursor* text_cursor = (TextCursor*) malloc(sizeof(TextCursor));
+  text_cursor->pos = 0;
+  text_cursor->x  = 0;
+  text_cursor->y = 0;
+
+  //int editor_cursor_pos = text_buffer_length / 2;
+  //int editor_cursor_pos_x;
+  // int editor_cursor_pos_y;
   // TODO track length of each line in the text buffer, to enable jumps (home, end, up/down arrows...)
 
   // causes some overhead. can control with SDL_StopTextInput()
@@ -676,15 +817,16 @@ int main(){
         // TODO cursor management, underline corner style
         if (evt.type == SDL_KEYDOWN){
           // backspace
-          if (evt.key.keysym.sym == SDLK_BACKSPACE && text_buffer_length > 0){
-            char* text_dst = text_buffer + editor_cursor_pos - 1;
+          if (evt.key.keysym.sym == SDLK_BACKSPACE && text_buffer->length > 0){
+            char* text_dst = text_buffer->text + text_cursor->pos - 1;
             char* text_src = text_dst + 1;
-            char* text_end = text_buffer + text_buffer_length;
+            char* text_end = text_buffer->text + text_buffer->length;
             memmove(text_dst, text_src, text_end-text_src); 
 
-            --text_buffer_length;
-            text_buffer[text_buffer_length] = '\0';
-            --editor_cursor_pos;
+            --text_buffer->length;
+            text_buffer->text[text_buffer->length] = '\0';
+            text_buffer->line_length[text_cursor->y] -= 1; // TODO what if line length is already zero??
+            editor_cursor_move(text_buffer, text_cursor, TEXTCURSOR_MOVE_DIR_LEFT);
             render_text = 1;
             parse_text = 1;
           }
@@ -709,48 +851,51 @@ int main(){
           else if (evt.key.keysym.sym == SDLK_RETURN){
             // move text to make space for inserting characters
             // TODO verify adding text at the end
-            char* text_src = text_buffer + editor_cursor_pos;
+            char* text_src = text_buffer->text + text_cursor->pos;
             char* text_dst = text_src + 1;
-            char* text_end = text_buffer + text_buffer_length;
+            char* text_end = text_buffer->text + text_buffer->length;
             memmove(text_dst, text_src, text_end - text_src);
 
             // actually add the character
-            text_buffer[editor_cursor_pos] = '\n';
-            ++text_buffer_length;
-            ++editor_cursor_pos;
+            text_buffer->text[text_cursor->pos] = '\n';
+            ++text_buffer->length;
+            editor_cursor_move(text_buffer, text_cursor, TEXTCURSOR_MOVE_DIR_RIGHT);
             render_text = 1;
             parse_text = 1;
 
             printf("[INSERT] RETURN\n"); 
           }
           else if(evt.key.keysym.sym == SDLK_LEFT){
-            if (editor_cursor_pos > 0){
-              --editor_cursor_pos;
-            }
+            editor_cursor_move(text_buffer, text_cursor, TEXTCURSOR_MOVE_DIR_LEFT);
           }
           else if(evt.key.keysym.sym == SDLK_RIGHT){
-            if (editor_cursor_pos < text_buffer_length){
-              ++editor_cursor_pos;
-            }
+            editor_cursor_move(text_buffer, text_cursor, TEXTCURSOR_MOVE_DIR_RIGHT);
+          }
+          else if (evt.key.keysym.sym == SDLK_UP){
+            editor_cursor_move(text_buffer, text_cursor, TEXTCURSOR_MOVE_DIR_UP);
+          }
+          else if (evt.key.keysym.sym == SDLK_DOWN){
+            editor_cursor_move(text_buffer, text_cursor, TEXTCURSOR_MOVE_DIR_DOWN);
           }
 
-        }
+        } // keypress
         else if( evt.type == SDL_TEXTINPUT){
-          assert(text_buffer_length < EDITOR_BUFFER_LENGTH);
+          assert(text_buffer->length < EDITOR_BUFFER_LENGTH);
           // TODO double check not copying or pasting??
           // TODO fix first new character.. it needs a 
 
           // move text to make space for inserting characters
           // TODO verify adding text at the end
-          char* text_src = text_buffer + editor_cursor_pos;
+          char* text_src = text_buffer->text + text_cursor->pos;
           char* text_dst = text_src + 1;
-          char* text_end = text_buffer + text_buffer_length;
+          char* text_end = text_buffer->text + text_buffer->length;
           memmove(text_dst, text_src, text_end - text_src);
 
           // actually add the character
-          text_buffer[editor_cursor_pos] = evt.text.text[0];
-          ++text_buffer_length;
-          ++editor_cursor_pos;
+          text_buffer->text[text_cursor->pos] = evt.text.text[0];
+          ++text_buffer->length;
+          text_buffer->line_length[text_cursor->y] += 1;
+          editor_cursor_move(text_buffer, text_cursor, TEXTCURSOR_MOVE_DIR_RIGHT);
           render_text = 1;
           parse_text = 1;
 
@@ -786,7 +931,7 @@ int main(){
     // TODO be able to use keyboard shortcuts!
 
     if (parse_text == 1){
-      editor_parse_text(text_buffer, text_buffer_length);
+      editor_parse_text(text_buffer->text, text_buffer->length);
     }
 
     // DRAW
@@ -815,30 +960,28 @@ int main(){
     // text rendering, and figure out where the cursor is
 
     if (1 == 1){ // TODO if (render_text == 1)
-      if (text_buffer_length > 0){
+      if (text_buffer->length > 0){
         // figure out how many lines there are to render
-        int text_lines = 1;
-        char* line_start = text_buffer;
+        editor_find_line_lengths(text_buffer);
+
+        char* line_start = text_buffer->text;
         char* line_end = NULL; 
-        char* text_buffer_end = text_buffer + text_buffer_length; 
+        char* text_buffer_end = text_buffer->text + text_buffer->length;
         char line[LINE_MAX_LENGTH];
         int line_height_offset = 0;
 
-        while (1){
-          line_end = memchr(line_start, (int) '\n', text_buffer_end - line_start);
-          if (line_end == NULL){
-            line_end = text_buffer_end;
-          }
+        for(int line_number=0; line_number<text_buffer->lines; ++line_number){
+          line_end = line_start + text_buffer->line_length[line_number];
+          // assert(line_end != line_start);
 
           // prepare the line to be rendered
-          int line_length = line_end - line_start;
-          assert(line_length < LINE_MAX_LENGTH);
-          memcpy(line, line_start, line_length);
-          line[line_length] = '\0';
+          assert(text_buffer->line_length[line_number] < LINE_MAX_LENGTH);
+          memcpy(line, line_start, text_buffer->line_length[line_number]);
+          line[text_buffer->line_length[line_number]] = '\0';
 
           // cursor drawing!
           if (viewport_active == VIEWPORT_EDITOR){
-            if ((editor_cursor_pos >= line_start - text_buffer) && (editor_cursor_pos <= line_end - text_buffer)){
+            if ((text_cursor->pos >= line_start - text_buffer->text) && (text_cursor->pos <= line_end - text_buffer->text)){
               // draw a shaded background
               SDL_Rect cursor_line_background = {
                 .x = 0,
@@ -851,11 +994,11 @@ int main(){
 
               // find the location within the line?
               // TODO need to reference this to actual glyph widths!!
-              editor_cursor_pos_x = editor_cursor_pos - (line_start - text_buffer);
-              editor_cursor_pos_y = text_lines - 1; // -1 for zero indexing
+              // editor_cursor_pos_x = text_cursor->pos - (line_start - text_buffer->text);
+              // editor_cursor_pos_y = text_lines - 1; // -1 for zero indexing
 
               SDL_Rect cursor_draw = {
-                .x = editor_cursor_pos_x * 7,
+                .x = text_cursor->x * 7,
                 .y = line_height_offset,
                 .w = 3,
                 .h = 20
@@ -890,12 +1033,9 @@ int main(){
             break;
           }
 
-          ++text_lines;
-          assert(text_lines < 100);
-        }
+        } // (close) while going through all lines
 
-        //sdlj_textbox_render(render, &editor_textbox, text_buffer);
-      }
+      } // (close) if there is ANY text to display
       else{ // empty render if no text is there
         sdlj_textbox_render(render, &editor_textbox, " ");
       }
@@ -977,6 +1117,7 @@ int main(){
   cleanup:
   sdl_cleanup(win, render);
   tasks_free();
+  editor_bufffer_destroy(text_buffer);
 
  return 0;
 }
