@@ -437,6 +437,10 @@ void node_to_text(){
   // flag to do optioanl stuff? 
   // how to denote cursor? 
 
+  // for each ndoe
+  // if node selected for edit..
+  // go through properties, write stuff
+
 }
 
 
