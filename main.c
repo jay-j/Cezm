@@ -257,23 +257,26 @@ void editor_parse_propertyline(Task_Node* task, char* line_start, int line_worki
       // parse what you find
       int value_length;
       char* value = string_strip(&value_length, property_split_start, property_split_end - property_split_start);
-      User* user = user_get(value, value_length);
-      if (user == NULL){
-        printf("user: '%.*s' NEW!\n", value_length, value);
-        user = user_create(value, value_length); // TODO actually create this user
-        // track which line the cursor is on? interact with those values differently?
-        // periodic cleanup function? index matters, rely on the structure of the text, there can't be extra users!
-        // mark ones in editor as untrustworthy, check they still exist? 
-        // does this problem also apply to activity names?
-      }
-      else{
-        printf("user: '%.*s'\n", value_length, value);
-      }
-      user->trash = FALSE;
-      user->mode_edit = TRUE;
+      if (value_length > 0){
+        User* user = user_get(value, value_length);
+        if (user == NULL){
+          printf("user: '%.*s' NEW!\n", value_length, value);
+          user = user_create(value, value_length); // TODO actually create this user
+          // track which line the cursor is on? interact with those values differently?
+          // periodic cleanup function? index matters, rely on the structure of the text, there can't be extra users!
+          // mark ones in editor as untrustworthy, check they still exist? 
+          // does this problem also apply to activity names?
+        }
+        else{
+          printf("user: '%.*s'\n", value_length, value);
+        }
+        user->trash = FALSE;
+        user->mode_edit = TRUE;
+        user_editor_visited[user - users] = TRUE;
 
 
-      // assign to the task? need to check if it is already there?
+        // assign to the task? need to check if it is already there?
+      }
 
 
       property_split_start = property_split_end + 1;
@@ -326,6 +329,9 @@ void editor_parse_text(char* text_start, size_t text_length){
   //memset(task_editor_visited, 0, task_allocation_total);
   for (size_t i=0; i<task_allocation_total; ++i){
     task_editor_visited[i] = FALSE;
+  }
+  for (size_t i=0; i<user_allocation_total; ++i){
+    user_editor_visited[i] = FALSE;
   }
 
   // read one line at a time
@@ -395,7 +401,7 @@ void editor_parse_text(char* text_start, size_t text_length){
           if (task_allocation_used > 0){
             --task_allocation_used;
           }
-          printf("REMOVING tasks[%d].name=%s..\n", i, tasks[i].task_name);
+          printf("REMOVING tasks[%ld].name=%s..\n", i, tasks[i].task_name);
           hash_table_remove(task_names_ht, tasks[i].task_name);
         }
       }
@@ -411,13 +417,15 @@ void editor_parse_text(char* text_start, size_t text_length){
 
         if (users[i].mode_edit == TRUE){
           // this user was expected to be seen upon parsing but was not; delete them!!
-          // TODO actually do it
-
-
+          users[i].trash = TRUE;
+          if (user_allocation_used > 0){
+            --user_allocation_used;
+          }
+          printf("REMOVING users[%ld].name=%s..\n", i, users[i].name);
+          hash_table_remove(users_ht, users[i].name);
         }
       }
     }
-
   }
 
 
