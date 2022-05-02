@@ -40,15 +40,15 @@ TTF_Font* global_font = NULL;
 
 // the main table of all tasks
 Task_Node* tasks;
-uint64_t task_allocation_used = 0;
-uint64_t task_allocation_total = 128;
-uint64_t task_last_created = 0;
+size_t task_allocation_used = 0;
+size_t task_allocation_total = 128;
+size_t task_last_created = 0;
 uint8_t* task_editor_visited;
 
 User* users;
-uint64_t user_allocation_used = 0;
-uint64_t user_allocation_total = 16;
-uint64_t user_last_created = 0;
+size_t user_allocation_used = 0;
+size_t user_allocation_total = 16;
+size_t user_last_created = 0;
 uint8_t* user_editor_visited;
 
 HashTable* task_names_ht;
@@ -145,6 +145,53 @@ Task_Node* task_get(char* task_name, int task_name_length){
   Task_Node* task = (Task_Node*) hash_table_get(task_names_ht, name);
   return task;
 }
+
+
+// check if the given user is already assigned to the given task
+uint8_t task_user_has(Task_Node* task, User* user){
+  uint8_t result = FALSE;
+  for(size_t i=0; i<task->user_qty; ++i){
+    if (task->users[i] == user){
+      result = TRUE;
+    }
+  }
+  return result;
+}
+
+
+// add user to task if user is not already there
+void task_user_add(Task_Node* task, User* user){
+  assert(task->user_qty < TASK_USERS_MAX);
+  assert(user->task_qty < USER_TASKS_MAX);
+
+  if (task_user_has(task, user) == FALSE){
+    task->users[task->user_qty] = user;
+    task->user_qty += 1;
+
+    user->tasks[user->task_qty] = task;
+    user->task_qty += 1;
+  }
+}
+
+
+void task_user_remove(Task_Node* task, User* user){
+  size_t id = 0;
+  for(size_t i=0; i<task->user_qty; ++i){
+    if (task->users[i] == user){
+      id = i;
+      break;
+    }
+  }
+  printf("need to remove user %s from task %s\n", user->name, task->task_name);
+  
+  // now shuffle down all the remaining users, update the qty
+  for (size_t i=id; i<task->user_qty-1; ++i){
+    task->users[i] = task->users[i+1];
+  }
+  task->user_qty -= 1;
+
+}
+
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -274,10 +321,10 @@ void editor_parse_propertyline(Task_Node* task, char* line_start, int line_worki
         user->mode_edit = TRUE;
         user_editor_visited[user - users] = TRUE;
 
-
-        // assign to the task? need to check if it is already there?
+        // assign to the task, if it is not already there
+        // TODO later need to scrub to remove users!!
+        task_user_add(task, user);
       }
-
 
       property_split_start = property_split_end + 1;
     }
@@ -422,6 +469,12 @@ void editor_parse_text(char* text_start, size_t text_length){
             --user_allocation_used;
           }
           printf("REMOVING users[%ld].name=%s..\n", i, users[i].name);
+
+          // TODO need to remove references to those users
+          for(size_t j=0; j<users[i].task_qty; ++j){
+            task_user_remove(users[i].tasks[j], users+i);
+          }
+
           hash_table_remove(users_ht, users[i].name);
         }
       }
@@ -780,6 +833,11 @@ int main(){
   text_cursor->x  = 0;
   text_cursor->y = 0;
 
+  TextBox name_textbox;
+  name_textbox.color.r = 0; name_textbox.color.g = 0; name_textbox.color.b = 0; name_textbox.color.a = 0xFF;
+  name_textbox.width_max = WINDOW_WIDTH * 0.75;
+  name_textbox.texture = NULL;
+
   // causes some overhead. can control with SDL_StopTextInput()
   SDL_StartTextInput();
 
@@ -935,7 +993,12 @@ int main(){
     // TODO be able to use keyboard shortcuts!
 
     if (parse_text == 1){
+      // extract property changes from the text
       editor_parse_text(text_buffer->text, text_buffer->length);
+
+      // PERFORM SCHEDULING! TODO can get fancy....
+
+
     }
 
     // DRAW
@@ -1075,13 +1138,40 @@ int main(){
     SDL_RenderFillRect(render, &viewport_display_local);
 
 
+    //// DRAW USER NAMES
+    // TODO what is the right way to later connect user name to a column location (eventually, in pixels)
+
+    int user_column_increment = viewport_display.w / (user_allocation_used);
+    int user_column_loc = user_column_increment / 2;
+    for (size_t i=0; i<user_allocation_total; ++i){
+      if (users[i].trash == FALSE){
+        //printf("draw column for user %s\n", users[i].name);
+        users[i].column_center_px = user_column_loc - name_textbox.width/2;
+        sdlj_textbox_render(render, &name_textbox, users[i].name);
+        SDL_Rect src = {0, 0, name_textbox.width, name_textbox.height};
+        SDL_Rect dst = {
+          users[i].column_center_px,
+          5, 
+          name_textbox.width, name_textbox.height};
+        assert(SDL_RenderCopy(render, name_textbox.texture, &src, &dst) == 0);
+        user_column_loc += user_column_increment;
+      }
+    }
+
+    // TODO a temporary way to see task distribution amongst users. not scheduled... :( 
+    int column_usage[user_allocation_used];
+    for(size_t i=0; i<user_allocation_used; ++i){
+      column_usage[i] = 0;
+    }
 
     //// DRAW TASK BOXES IN DISPLAY VIEWPORT
+    // TODO time scheduling function; how to make a grid of time and render some sensible view of that (let time drive position of things)
+    // TODO stretch tasks that correspond to multi users. make some kind of faded shadow indicator to dive underneath others?
     int locx = 10;
-    int locy = 10;
+    int locy = 50;
 
     for (size_t n=0; n<task_allocation_total; ++n){
-      if (tasks[n].trash == 0){
+      if (tasks[n].trash == FALSE){
         // TODO need to know the expected width to make sure it doesn't go offscreen? or don't care
         // TODO camera coordinate system; make layout somewhat independent of shown pixels
         // TODO an actual layout engine, show properties of the nodes and such

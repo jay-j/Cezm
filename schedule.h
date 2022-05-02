@@ -1,5 +1,6 @@
 #include <stdint.h>
 
+// a single task may be worked by up to 8 users
 #define TASK_USERS_MAX 8
 #define TASK_DEPENDENCIES_MAX 64
 
@@ -12,6 +13,20 @@
 #define SCHEDULE_CONSTRAINT_DURATION (1<<1)
 #define SCHEDULE_CONSTRAINT_END (1<<2)
 
+// a user may be assigned a maximum of 1024 tasks
+#define USER_TASKS_MAX 1024
+
+typedef struct Task_Node Task_Node;
+
+typedef struct User{
+  char* name;
+  uint8_t trash; 
+  uint8_t mode_edit;
+  uint32_t column_center_px;
+  Task_Node* tasks[USER_TASKS_MAX];
+  size_t task_qty;
+} User;
+
 // build a crazy hash table out of nodes? name -> id?
 // how to smartly handle renaming? 
 // TODO rename symbol button
@@ -19,18 +34,17 @@
 // does the Task_Node need to be built of some property struct? 
 // for each property to store information about itself (value vs list, list length, if it is unset, auto-calculated, or user set...)
 
-typedef struct Task_Node{
-  uint64_t task_id;
+struct Task_Node{
   char* task_name;
-  uint16_t mode; // see TASK_MODE_
+  uint16_t mode; // see TASK_MODE_ constants
   uint8_t trash;
 
-  uint16_t user_id[TASK_USERS_MAX];
-  uint16_t user_qty;
+  User* users[TASK_USERS_MAX];
+  size_t user_qty;
 
   // TODO should this instead be pointers to those tasks?
-  uint64_t dependents[TASK_DEPENDENCIES_MAX];
-  uint16_t dependent_qty;
+  Task_Node* dependents[TASK_DEPENDENCIES_MAX];
+  size_t dependent_qty;
 
   uint64_t schedule_constraints;
   uint64_t day_start;
@@ -42,19 +56,13 @@ typedef struct Task_Node{
 
   // DERIVED VARIABLES BELOW THIS LINE
   // TODO should this instead be pointers to those other tasks? 
-  uint64_t prerequisites[TASK_DEPENDENCIES_MAX];
-  uint16_t prerequisite_qty;
+  Task_Node* prerequisites[TASK_DEPENDENCIES_MAX];
+  size_t prerequisite_qty;
   
   // WORKING PROPERTIES
   // selected by cursor?
 
-} Task_Node;
-
-typedef struct User{
-  char* name;
-  uint8_t trash; 
-  uint8_t mode_edit;
-} User;
+};
 
 // track the quantity of activities created, to just increment forever. don't worry about re-use and abandoning old numbers
 // how to keep memory use efficient? don't care about (un)mallocing new items since this is infrequent? 
