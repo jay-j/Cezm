@@ -2,7 +2,7 @@ CFLAGS = -O0 -Wall -Wextra -g
 
 # for Linux
 LIB_BUILTIN = -lSDL2 -lm -lSDL2_ttf
-LIB =  schedule.h utilities-c/hash_lib/hashtable.h
+LIB = schedule.h utilities-c/hash_lib/hashtable.h
 LIBOBJ = utilities-c/hash_lib/hashtable.o
 
 all: main.bin
@@ -19,5 +19,4 @@ all: main.bin
 .PHONY: clean
 clean:
 	rm -f *.o
-	rm -f jzon-c/*.o
 	rm -f *.bin
