@@ -536,12 +536,12 @@ void draw_box(SDL_Renderer* render, int x, int y, int flags, Task_Node* task){
   int border = 2;
 
   SDL_Rect rect;
-  // upper left corner position
-  rect.x = x; 
-  rect.y = y;
   // width, height
-  rect.w = 80;
+  rect.w = 180;
   rect.h = 40;
+  // upper left corner position
+  rect.x = x - rect.w/2; 
+  rect.y = y;
 
   // draw outline if selected
   if ((flags & DISPLAY_TASK_SELECTED) > 0){
@@ -581,7 +581,7 @@ void draw_box(SDL_Renderer* render, int x, int y, int flags, Task_Node* task){
   assert(texture != NULL);
 
   SDL_Rect textbox;
-  textbox.x = x + border;
+  textbox.x = x + border - rect.w/2;
   textbox.y = y + border;
   TTF_SizeText(global_font, task->task_name, &textbox.w, &textbox.h);
 
@@ -1143,9 +1143,11 @@ int main(){
 
     int user_column_increment = viewport_display.w / (user_allocation_used);
     int user_column_loc = user_column_increment / 2;
+    size_t user_column_count = 0;
     for (size_t i=0; i<user_allocation_total; ++i){
       if (users[i].trash == FALSE){
         //printf("draw column for user %s\n", users[i].name);
+        users[i].column_index = user_column_count;
         users[i].column_center_px = user_column_loc - name_textbox.width/2;
         sdlj_textbox_render(render, &name_textbox, users[i].name);
         SDL_Rect src = {0, 0, name_textbox.width, name_textbox.height};
@@ -1154,7 +1156,9 @@ int main(){
           5, 
           name_textbox.width, name_textbox.height};
         assert(SDL_RenderCopy(render, name_textbox.texture, &src, &dst) == 0);
+
         user_column_loc += user_column_increment;
+        user_column_count += 1;
       }
     }
 
@@ -1172,15 +1176,26 @@ int main(){
 
     for (size_t n=0; n<task_allocation_total; ++n){
       if (tasks[n].trash == FALSE){
+        Task_Node* task = tasks + n;
+
+        for (size_t u=0; u<task->user_qty; ++u){
+          User* user = task->users[u];
+          locx = user->column_center_px;
+          locy = column_usage[user->column_index]*50 + 50;
+          
+          draw_box(render, locx, locy, 0, tasks+n);
+
+          column_usage[user->column_index] += 1;
+        }
+
         // TODO need to know the expected width to make sure it doesn't go offscreen? or don't care
         // TODO camera coordinate system; make layout somewhat independent of shown pixels
         // TODO an actual layout engine, show properties of the nodes and such
-        draw_box(render, locx, locy, 0, tasks+n);
-        locx = locx + 120;
-        if (locx > viewport_display.w){
-          locx = 10;
-          locy += 100;
-        }
+        //locx = locx + 120;
+        // if (locx > viewport_display.w){
+        //  locx = 10;
+        //  locy += 100;
+        // }
       }
     }
         

@@ -25,6 +25,7 @@ typedef struct User{
   uint32_t column_center_px;
   Task_Node* tasks[USER_TASKS_MAX];
   size_t task_qty;
+  size_t column_index; // display column
 } User;
 
 // build a crazy hash table out of nodes? name -> id?
