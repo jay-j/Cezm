@@ -703,7 +703,7 @@ void editor_cursor_move(TextBuffer* tb, TextCursor* tc, int movedir){
       // moving onto a longer line
       else{
         x_delta += tb->line_length[tc->y] - tc->x;
-        tc->pos -= x_delta; // TODO plus one?
+        tc->pos -= x_delta;
       }
     }
   }
@@ -714,10 +714,10 @@ void editor_cursor_move(TextBuffer* tb, TextCursor* tc, int movedir){
 
       // moving onto a shorter line
       if (tc->x > tb->line_length[tc->y]){
-        tc->x = tb->line_length[tc->y];
+        tc->x = tb->line_length[tc->y]-1;
       }
         
-      tc->pos = x_delta + tc->x;
+      tc->pos += x_delta + tc->x;
     }
   }
 
@@ -725,7 +725,32 @@ void editor_cursor_move(TextBuffer* tb, TextCursor* tc, int movedir){
 
 }
 
+void editor_load_text(TextBuffer* text_buffer, const char* filename){
+
+  // TODO temporary just import a demo project file
+  // FILE* fd = fopen("examples/demo1.json", "r");
+  FILE* fd = fopen(filename, "r");
+  assert(fd != NULL);
+  char* text_cursor_loading = text_buffer->text;
+  do {
+    *text_cursor_loading = fgetc(fd);
+    ++text_cursor_loading;
+    text_buffer->length += 1;
+  } while(*(text_cursor_loading - 1) != EOF);
+  fclose(fd);
+  text_buffer->length -= 1;
+  //text_buffer->text[text_buffer->length] = '\0';
+  printf("loaded text of length %d\n", text_buffer->length);
+  printf("text is '%.*s'\n", text_buffer->length, text_buffer->text);
+
+  // do a test parse of the text description
+  editor_parse_text(text_buffer->text, text_buffer->length);
+  editor_find_line_lengths(text_buffer);
+}
+
+
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
 
 int main(){
   // Platform Init Window
@@ -740,27 +765,10 @@ int main(){
   tasks_init();
 
   TextBuffer* text_buffer = editor_buffer_init();
-
-  // TODO temporary just import a demo project file
-  FILE* fd = fopen("examples/demo1.json", "r");
-  assert(fd != NULL);
-  char* text_cursor_loading = text_buffer->text;
-  do {
-    *text_cursor_loading = fgetc(fd);
-    ++text_cursor_loading;
-    text_buffer->length += 1;
-  } while(*(text_cursor_loading - 1) != EOF);
-  fclose(fd);
-  text_buffer->text[text_buffer->length] = '\0';
-  printf("loaded text of length %d\n", text_buffer->length);
-
-  // do a test parse of the text description
-  editor_parse_text(text_buffer->text, text_buffer->length);
-  editor_find_line_lengths(text_buffer);
+  editor_load_text(text_buffer, "examples/demo1.json");
 
 
   // TODO difference between full/raw source and the buffer being shown? need to be able to turn Task_Nodes[] back into text
-  // TODO cursor system
   // TODO smooth scroll system
   // TODO error flagging / colors system; live syntax parsing
   TextBox editor_textbox;
@@ -772,14 +780,8 @@ int main(){
   text_cursor->x  = 0;
   text_cursor->y = 0;
 
-  //int editor_cursor_pos = text_buffer_length / 2;
-  //int editor_cursor_pos_x;
-  // int editor_cursor_pos_y;
-  // TODO track length of each line in the text buffer, to enable jumps (home, end, up/down arrows...)
-
   // causes some overhead. can control with SDL_StopTextInput()
   SDL_StartTextInput();
-
 
   // TODO display viewport
   // layout of nodes
