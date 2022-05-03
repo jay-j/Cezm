@@ -292,6 +292,7 @@ void editor_tasks_cleanup(){
 
 
 // TODO this has a bug.. not removing tasks from users properly when that user is removed from one task but still has other valid tasks
+// don't track seen user? track seen task.user? 
 void editor_users_cleanup(){
   // scrub through users, remove any that you expected to see but did not
   for (size_t i=0; i<user_allocation_total; ++i){
@@ -943,6 +944,9 @@ int main(){
           else if (evt.key.keysym.sym == SDLK_DOWN){
             editor_cursor_move(text_buffer, text_cursor, TEXTCURSOR_MOVE_DIR_DOWN);
           }
+          // F2 - rename symbol in edit mode
+          // SHIFT+F2 - rename symbol even if not in edit mode
+          // F3 - search stuff! can be smart scoping?
 
         } // keypress
         else if( evt.type == SDL_TEXTINPUT){
@@ -1196,6 +1200,7 @@ int main(){
         }
       }
     }
+    // TODO graveyard for orphaned tasks (no users, improper dependencies to be plotted, etc.)
         
 
     //// UPDATE SCREEN

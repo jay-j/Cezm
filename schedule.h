@@ -20,11 +20,16 @@ typedef struct Task_Node Task_Node;
 
 typedef struct User{
   char* name;
-  uint8_t trash; 
+  uint8_t trash; // if TRUE, OK to recycle this object
   uint8_t mode_edit;
-  uint32_t column_center_px;
+  uint8_t visited; // if TRUE, have seen this user this round
+
+  // network properties
   Task_Node* tasks[USER_TASKS_MAX];
   size_t task_qty;
+
+  // display properties
+  uint32_t column_center_px;
   size_t column_index; // display column
 } User;
 
@@ -32,8 +37,6 @@ typedef struct User{
 // how to smartly handle renaming? 
 // TODO rename symbol button
 
-// does the Task_Node need to be built of some property struct? 
-// for each property to store information about itself (value vs list, list length, if it is unset, auto-calculated, or user set...)
 
 struct Task_Node{
   char* task_name;
@@ -41,10 +44,12 @@ struct Task_Node{
   uint8_t trash;
 
   User* users[TASK_USERS_MAX];
+  uint8_t user_visited[TASK_USERS_MAX];
   size_t user_qty;
 
   // TODO should this instead be pointers to those tasks?
   Task_Node* dependents[TASK_DEPENDENCIES_MAX];
+  uint8_t dependent_visited[TASK_DEPENDENCIES_MAX];
   size_t dependent_qty;
 
   uint64_t schedule_constraints;
@@ -56,7 +61,6 @@ struct Task_Node{
   uint16_t subsystem_id;
 
   // DERIVED VARIABLES BELOW THIS LINE
-  // TODO should this instead be pointers to those other tasks? 
   Task_Node* prerequisites[TASK_DEPENDENCIES_MAX];
   size_t prerequisite_qty;
   
@@ -67,11 +71,9 @@ struct Task_Node{
 
 // track the quantity of activities created, to just increment forever. don't worry about re-use and abandoning old numbers
 // how to keep memory use efficient? don't care about (un)mallocing new items since this is infrequent? 
-// why use ids to store things vs. using pointers? 
 //   import/export process will have to convert
 
 
-// hash table lookup map to connect name with pointer?
 
 SDL_Color status_colors[10];
 void status_color_init(){
