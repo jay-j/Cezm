@@ -175,14 +175,14 @@ void task_user_add(Task_Node* task, User* user){
 
 
 void task_user_remove(Task_Node* task, User* user){
-  size_t id = 0;
+  size_t id = -1;
   for(size_t i=0; i<task->user_qty; ++i){
     if (task->users[i] == user){
       id = i;
       break;
     }
   }
-  printf("need to remove user %s from task %s\n", user->name, task->task_name);
+  printf("need to remove user %s from task %s. userid in that task is %d\n", user->name, task->task_name, id);
   
   // now shuffle down all the remaining users, update the qty
   for (size_t i=id; i<task->user_qty-1; ++i){
@@ -271,6 +271,54 @@ char* string_strip(int* result_length, char* str, int str_length){
 }
 
 
+void editor_tasks_cleanup(){
+  // scrub through tasks, remove any that you expected to see but did not
+  for (size_t i=0; i<task_allocation_total; ++i){
+    if (tasks[i].trash == FALSE){ // if node is NOT trash
+      if (task_editor_visited[i] == FALSE){ // if we did not visit the node this time parsing the text
+        if ((tasks[i].mode & TASK_MODE_EDIT) > 0){ // TODO if this runs so much.. better to have a faster cache lookup?
+          tasks[i].trash = TRUE; 
+          if (task_allocation_used > 0){
+            --task_allocation_used;
+          }
+          printf("REMOVING tasks[%ld].name=%s..\n", i, tasks[i].task_name);
+          hash_table_remove(task_names_ht, tasks[i].task_name);
+        }
+      }
+    }
+  }
+  hash_table_print(task_names_ht);
+}
+
+
+// TODO this has a bug.. not removing tasks from users properly when that user is removed from one task but still has other valid tasks
+void editor_users_cleanup(){
+  // scrub through users, remove any that you expected to see but did not
+  for (size_t i=0; i<user_allocation_total; ++i){
+    if(users[i].trash == FALSE){
+      if (user_editor_visited[i] == FALSE){
+
+        if (users[i].mode_edit == TRUE){
+          // this user was expected to be seen upon parsing but was not; delete them!!
+          users[i].trash = TRUE;
+          if (user_allocation_used > 0){
+            --user_allocation_used;
+          }
+          printf("REMOVING users[%ld].name=%s..\n", i, users[i].name);
+
+          for(size_t j=0; j<users[i].task_qty; ++j){
+            task_user_remove(users[i].tasks[j], users+i);
+          }
+
+          hash_table_remove(users_ht, users[i].name);
+        }
+      }
+    }
+  }
+}
+
+
+// comma to separate values in a list
 void editor_parse_propertyline(Task_Node* task, char* line_start, int line_working_length){
   char* line_end = line_start + line_working_length;
   // split into property and value parts. split on ':'
@@ -335,6 +383,7 @@ void editor_parse_propertyline(Task_Node* task, char* line_start, int line_worki
     // TODO list comprehension
     // TODO linking with pointers.. hash lookup stuff
     // TODO update the quantity of dependents in the list also 
+    //
 
   }
   else if(memcmp(property_str, "duration", 8) == 0){
@@ -371,9 +420,10 @@ void editor_parse_text(char* text_start, size_t text_length){
 
   // assume starting at top level
 
-  // track difference betweeen seen tasks and expected to see tasks
+  // PASS 1 - just add/remove tasks. TODO
+
+  // track difference betweeen seen [tasks, users] and expected to see tasks
   // if you don't see tasks that you expect to.. need to remove those!
-  //memset(task_editor_visited, 0, task_allocation_total);
   for (size_t i=0; i<task_allocation_total; ++i){
     task_editor_visited[i] = FALSE;
   }
@@ -381,6 +431,7 @@ void editor_parse_text(char* text_start, size_t text_length){
     user_editor_visited[i] = FALSE;
   }
 
+  // PASS 2 - all task properties, now you can scrub dependencies TODO
   // read one line at a time
   char* line_start = text_start;
   char* line_end;
@@ -398,9 +449,7 @@ void editor_parse_text(char* text_start, size_t text_length){
     }
 
     if (memchr(line_start, (int) '{', line_working_length) != NULL){
-      // name is text with exterior spaces, brackets stripped out
       // TODO check, prevent duplicate task names
-      // figure out the name
       int task_name_length;
       char* task_name = string_strip(&task_name_length, line_start, line_working_length);
       printf("TASK, name '%.*s'\n", task_name_length, task_name);
@@ -424,8 +473,6 @@ void editor_parse_text(char* text_start, size_t text_length){
     else if(memchr(line_start, (int) ':', line_working_length) != NULL){
       editor_parse_propertyline(task, line_start, line_working_length);
 
-      // parse.. how to connect parts of struct with strings? 
-      // if strcmp(property_str, "dependent_on") == .... etc. a big huge list of conditionals
       // then with in each can have custom logic for parsing. lists, dates parsing, string vs numeric values
 
       // TODO need to track what the cursor is currently editing? 
@@ -433,53 +480,15 @@ void editor_parse_text(char* text_start, size_t text_length){
 
     // advance to the next line
     line_start = line_end + 1;
-  }
+  } // done going through lines
   // text at the top level creates activities with that name
   // open bracket increases to the next level
   // text at the next level causes a lookup for a struct member. colon separator
-  // then input type specific. comma to separate list items.
 
-  // scrub through tasks, remove any that you expected to see but did not
-  for (size_t i=0; i<task_allocation_total; ++i){
-    if (tasks[i].trash == FALSE){ // if node is NOT trash
-      if (task_editor_visited[i] == FALSE){ // if we did not visit the node this time parsing the text
-        if ((tasks[i].mode & TASK_MODE_EDIT) > 0){ // TODO if this runs so much.. better to have a faster cache lookup?
-          tasks[i].trash = TRUE; 
-          if (task_allocation_used > 0){
-            --task_allocation_used;
-          }
-          printf("REMOVING tasks[%ld].name=%s..\n", i, tasks[i].task_name);
-          hash_table_remove(task_names_ht, tasks[i].task_name);
-        }
-      }
-    }
-  }
-  hash_table_print(task_names_ht);
+  editor_tasks_cleanup();
+  editor_users_cleanup();
+
   printf("[STATUS] Finished parsing text this round\n");
-
-  // scrub through users, remove any that you expected to see but did not
-  for (size_t i=0; i<user_allocation_total; ++i){
-    if(users[i].trash == FALSE){
-      if (user_editor_visited[i] == FALSE){
-
-        if (users[i].mode_edit == TRUE){
-          // this user was expected to be seen upon parsing but was not; delete them!!
-          users[i].trash = TRUE;
-          if (user_allocation_used > 0){
-            --user_allocation_used;
-          }
-          printf("REMOVING users[%ld].name=%s..\n", i, users[i].name);
-
-          // TODO need to remove references to those users
-          for(size_t j=0; j<users[i].task_qty; ++j){
-            task_user_remove(users[i].tasks[j], users+i);
-          }
-
-          hash_table_remove(users_ht, users[i].name);
-        }
-      }
-    }
-  }
 
 
   // TODO add better error handling warning stuff
@@ -635,13 +644,7 @@ void sdlj_textbox_render(SDL_Renderer* render, TextBox* textbox, char* text){
 
   SDL_FreeSurface(surface);
 
-  // TODO how to do wrapping??
 }
-
-
-// SDL_SetTextureBlendMode();
-// SDL_RenderCopyEx(render, text_texture, SDL_Rect* clip, SDL_Rect render_quad, angle, center, flip);
-// SDL_RenderCopy(render, text_texture, SDL_Rect* src_rect, SDL_Rect* dst_rect);
 
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -671,6 +674,7 @@ TextBuffer* editor_buffer_init(){
   TextBuffer* tb = (TextBuffer*) malloc(sizeof(TextBuffer));
 
   tb->text = (char*) malloc(EDITOR_BUFFER_LENGTH * sizeof(char));
+  memset(tb->text, 0, EDITOR_BUFFER_LENGTH);
   tb->length = 0;
 
   tb->line_length = (int*) malloc(EDITOR_LINES_MAX * sizeof(*tb->line_length));
@@ -780,8 +784,6 @@ void editor_cursor_move(TextBuffer* tb, TextCursor* tc, int movedir){
 
 void editor_load_text(TextBuffer* text_buffer, const char* filename){
 
-  // TODO temporary just import a demo project file
-  // FILE* fd = fopen("examples/demo1.json", "r");
   FILE* fd = fopen(filename, "r");
   assert(fd != NULL);
   char* text_cursor_loading = text_buffer->text;
@@ -818,10 +820,12 @@ int main(){
   tasks_init();
 
   TextBuffer* text_buffer = editor_buffer_init();
-  editor_load_text(text_buffer, "examples/demo1.json");
+  // if not loading a text buffer.. make it a space and length one
+  //text_buffer->text[0] = ' ';
+  //text_buffer->length = 1;
+  editor_load_text(text_buffer, "examples/demo1.json"); // TODO temporary.. later use filename
 
 
-  // TODO difference between full/raw source and the buffer being shown? need to be able to turn Task_Nodes[] back into text
   // TODO smooth scroll system
   // TODO error flagging / colors system; live syntax parsing
   TextBox editor_textbox;
@@ -960,14 +964,6 @@ int main(){
           editor_cursor_move(text_buffer, text_cursor, TEXTCURSOR_MOVE_DIR_RIGHT);
           render_text = 1;
           parse_text = 1;
-
-          /*
-          // auto insert close brackets
-          if (evt.text.text[0] == '{'){
-            text_buffer[text_buffer_length++] = '\n';
-            text_buffer[text_buffer_length++] = '}';
-          }
-          */
 
         }
         else if(evt.type == SDL_TEXTEDITING){
@@ -1138,64 +1134,66 @@ int main(){
     SDL_RenderFillRect(render, &viewport_display_local);
 
 
-    //// DRAW USER NAMES
-    // TODO what is the right way to later connect user name to a column location (eventually, in pixels)
+    if ((user_allocation_used > 0) && (task_allocation_used > 0)){
+      //// DRAW USER NAMES
+      // TODO what is the right way to later connect user name to a column location (eventually, in pixels)
 
-    int user_column_increment = viewport_display.w / (user_allocation_used);
-    int user_column_loc = user_column_increment / 2;
-    size_t user_column_count = 0;
-    for (size_t i=0; i<user_allocation_total; ++i){
-      if (users[i].trash == FALSE){
-        //printf("draw column for user %s\n", users[i].name);
-        users[i].column_index = user_column_count;
-        users[i].column_center_px = user_column_loc - name_textbox.width/2;
-        sdlj_textbox_render(render, &name_textbox, users[i].name);
-        SDL_Rect src = {0, 0, name_textbox.width, name_textbox.height};
-        SDL_Rect dst = {
-          users[i].column_center_px,
-          5, 
-          name_textbox.width, name_textbox.height};
-        assert(SDL_RenderCopy(render, name_textbox.texture, &src, &dst) == 0);
+      int user_column_increment = viewport_display.w / (user_allocation_used);
+      int user_column_loc = user_column_increment / 2;
+      size_t user_column_count = 0;
+      for (size_t i=0; i<user_allocation_total; ++i){
+        if (users[i].trash == FALSE){
+          //printf("draw column for user %s\n", users[i].name);
+          users[i].column_index = user_column_count;
+          users[i].column_center_px = user_column_loc - name_textbox.width/2;
+          sdlj_textbox_render(render, &name_textbox, users[i].name);
+          SDL_Rect src = {0, 0, name_textbox.width, name_textbox.height};
+          SDL_Rect dst = {
+            users[i].column_center_px,
+            5, 
+            name_textbox.width, name_textbox.height};
+          assert(SDL_RenderCopy(render, name_textbox.texture, &src, &dst) == 0);
 
-        user_column_loc += user_column_increment;
-        user_column_count += 1;
-      }
-    }
-
-    // TODO a temporary way to see task distribution amongst users. not scheduled... :( 
-    int column_usage[user_allocation_used];
-    for(size_t i=0; i<user_allocation_used; ++i){
-      column_usage[i] = 0;
-    }
-
-    //// DRAW TASK BOXES IN DISPLAY VIEWPORT
-    // TODO time scheduling function; how to make a grid of time and render some sensible view of that (let time drive position of things)
-    // TODO stretch tasks that correspond to multi users. make some kind of faded shadow indicator to dive underneath others?
-    int locx = 10;
-    int locy = 50;
-
-    for (size_t n=0; n<task_allocation_total; ++n){
-      if (tasks[n].trash == FALSE){
-        Task_Node* task = tasks + n;
-
-        for (size_t u=0; u<task->user_qty; ++u){
-          User* user = task->users[u];
-          locx = user->column_center_px;
-          locy = column_usage[user->column_index]*50 + 50;
-          
-          draw_box(render, locx, locy, 0, tasks+n);
-
-          column_usage[user->column_index] += 1;
+          user_column_loc += user_column_increment;
+          user_column_count += 1;
         }
+      }
 
-        // TODO need to know the expected width to make sure it doesn't go offscreen? or don't care
-        // TODO camera coordinate system; make layout somewhat independent of shown pixels
-        // TODO an actual layout engine, show properties of the nodes and such
-        //locx = locx + 120;
-        // if (locx > viewport_display.w){
-        //  locx = 10;
-        //  locy += 100;
-        // }
+      // TODO a temporary way to see task distribution amongst users. not scheduled... :( 
+      int column_usage[user_allocation_used];
+      for(size_t i=0; i<user_allocation_used; ++i){
+        column_usage[i] = 0;
+      }
+
+      //// DRAW TASK BOXES IN DISPLAY VIEWPORT
+      // TODO time scheduling function; how to make a grid of time and render some sensible view of that (let time drive position of things)
+      // TODO stretch tasks that correspond to multi users. make some kind of faded shadow indicator to dive underneath others?
+      int locx = 10;
+      int locy = 50;
+
+      for (size_t n=0; n<task_allocation_total; ++n){
+        if (tasks[n].trash == FALSE){
+          Task_Node* task = tasks + n;
+
+          for (size_t u=0; u<task->user_qty; ++u){
+            User* user = task->users[u];
+            locx = user->column_center_px;
+            locy = column_usage[user->column_index]*50 + 50;
+            
+            draw_box(render, locx, locy, 0, tasks+n);
+
+            column_usage[user->column_index] += 1;
+          }
+
+          // TODO need to know the expected width to make sure it doesn't go offscreen? or don't care
+          // TODO camera coordinate system; make layout somewhat independent of shown pixels
+          // TODO an actual layout engine, show properties of the nodes and such
+          //locx = locx + 120;
+          // if (locx > viewport_display.w){
+          //  locx = 10;
+          //  locy += 100;
+          // }
+        }
       }
     }
         
