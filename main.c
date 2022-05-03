@@ -737,7 +737,7 @@ void editor_cursor_move(TextBuffer* tb, TextCursor* tc, int movedir){
       tc->x -= 1;
 
       // wrap to previous line
-      if(tc->x - 1 < 0){
+      if(tc->x  < 0){
         tc->y -= 1;
         tc->x = tb->line_length[tc->y] - 1;
       }
