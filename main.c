@@ -185,16 +185,18 @@ void task_user_visited_set(Task_Node* task, User* user){
 
 
 void task_user_remove(Task_Node* task, User* user){
-  size_t id = -1;
+  size_t id = 0;
+  uint8_t found = 0;
   for(size_t i=0; i<task->user_qty; ++i){
     if (task->users[i] == user){
       id = i;
+      found = 1;
       break;
     }
   }
 
   // only continue with removal process if you can find the user
-  if (id != -1){
+  if (found == 1){
     printf("need to remove user %s from task %s. userid in that task is %ld\n", user->name, task->task_name, id);
     
     // now shuffle down all the remaining users, update the qty
@@ -439,20 +441,45 @@ void editor_parse_propertyline(Task_Node* task, char* line_start, int line_worki
 
         // assign to the task, if it is not already there
         // TODO later need to scrub to remove users!!
+        // TODO better to just zero task->user_qty for all tasks in edit mode?
         task_user_add(task, user);
         task_user_visited_set(task, user);
       }
 
       property_split_start = property_split_end + 1;
     }
-
-
   }
+
   else if(memcmp(property_str, "dependent_on", 12) == 0){
     // TODO list comprehension
-    // TODO linking with pointers.. hash lookup stuff
     // TODO update the quantity of dependents in the list also 
-    //
+    
+    printf("parsing dependencies\n");
+    char* property_split_start = value_str;
+    char* property_split_end = value_str;
+
+    while (property_split_start < line_end){
+      property_split_end = memchr(property_split_start, (int) ',', line_end - property_split_start);
+      if (property_split_end == NULL){
+        property_split_end = line_end;
+      }
+
+      // parse what you find
+      int value_length;
+      char* value = string_strip(&value_length, property_split_start, property_split_end - property_split_start);
+      if (value_length > 0){
+        Task_Node* dep = task_get(value, value_length);
+        if (dep != NULL){
+          task->dependents[task->dependent_qty] = dep;
+          task->dependent_qty += 1;
+        }
+        else{
+          // TODO something when dependencies don't exist
+        }
+      }
+
+      property_split_start = property_split_end + 1;
+    }
 
   }
   else if(memcmp(property_str, "duration", 8) == 0){
@@ -501,6 +528,9 @@ void editor_parse_text(char* text_start, size_t text_length){
       for (size_t u=0; u<tasks[i].user_qty; ++u){
         tasks[i].user_visited[u] = FALSE;
       }
+    }
+    if (tasks[i].mode_edit == TRUE){
+      tasks[i].dependent_qty = 0;
     }
   }
 
