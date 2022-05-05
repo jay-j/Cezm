@@ -44,12 +44,9 @@ struct Task_Node{
   uint8_t mode_edit;
 
   User* users[TASK_USERS_MAX];
-  uint8_t user_visited[TASK_USERS_MAX];
   size_t user_qty;
 
-  // TODO should this instead be pointers to those tasks?
   Task_Node* dependents[TASK_DEPENDENCIES_MAX];
-  uint8_t dependent_visited[TASK_DEPENDENCIES_MAX];
   size_t dependent_qty;
 
   uint64_t schedule_constraints;
@@ -140,18 +137,18 @@ void status_color_init(){
 // danger - circular dependencies
 // can I write as a matrix problem? 
 // UNKNOWNS: when does each task start? (for tasks without fixed end or start)
-// if have tasks design, build
-// design_start - build_end > 0
-// design_start - (build_start + build_duration) > 0
-// design_start - build_start > build_duration
-// how doe this respect resource usage for non dependency related tasks?
-// QP
-// pass 1: find what parts are underdefined and need to have values picked/guessed?
-// pass 2: then solve the set of equations.
 //
 // with differing costs.. seems like a path planning type algorithm is needed
 // construct a date network? at each date look at available tasks to start working on and check which of all is best?
 // envision fixed start and fixed end tasks are obstacles in this path
 // how to make this kind of model deal with uncertainty? 
-// how to organize the search space? 
 // depth first.. 
+// search is an array. elements are [[date, task_init], [date, task init], [date, task init] ... ]
+// can start an arbitrary number of tasks on the same day
+// keep track of two paths. one is the current (WIP) path. the other is the best solution path found to date. best being shortest total duration
+//
+
+struct Schedule_Event {
+  size_t date;
+  Task_Node* task;
+};

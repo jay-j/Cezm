@@ -174,16 +174,6 @@ void task_user_add(Task_Node* task, User* user){
 }
 
 
-void task_user_visited_set(Task_Node* task, User* user){
-  for (size_t u=0; u<task->user_qty; ++u){
-    if (task->users[u] == user){
-      task->user_visited[u] = TRUE;
-      break;
-    }
-  }
-}
-
-
 void task_user_remove(Task_Node* task, User* user){
   size_t id = 0;
   uint8_t found = 0;
@@ -301,16 +291,6 @@ void editor_tasks_cleanup(){
           printf("REMOVING tasks[%ld].name=%s..\n", i, tasks[i].task_name);
           hash_table_remove(task_names_ht, tasks[i].task_name);
         }
-        else{
-
-          // check the task for users that need to be removed from this one task
-          for (size_t u=0; u<tasks[i].user_qty; ++u){
-            if (tasks[i].user_visited[u] == FALSE){
-              task_user_remove(tasks+i, tasks[i].users[u]);
-            }
-          }
-        } 
-
       }
     }
   }
@@ -397,7 +377,6 @@ void editor_parse_propertyline(Task_Node* task, char* line_start, int line_worki
   char* property_str = string_strip(&property_str_length, line_start, split - line_start);
   int value_str_length;
   char* value_str = string_strip(&value_str_length, split, line_end - split);
-  // TODO split values on ','
 
   printf("(task %s) add property='%.*s'  value='%.*s'\n", task->task_name, property_str_length, property_str, value_str_length, value_str);
   if (value_str_length == 0){
@@ -406,8 +385,6 @@ void editor_parse_propertyline(Task_Node* task, char* line_start, int line_worki
 
   if (memcmp(property_str, "user", 4) == 0){
     printf("user property familiar!\n");
-    // TODO, list comprehension
-    // TODO pointer linking to user list? for relational database kinds of stuff at some other point? 
 
     // split on ','
     char* property_split_start = value_str;
@@ -440,10 +417,7 @@ void editor_parse_propertyline(Task_Node* task, char* line_start, int line_worki
         user_editor_visited[user - users] = TRUE;
 
         // assign to the task, if it is not already there
-        // TODO later need to scrub to remove users!!
-        // TODO better to just zero task->user_qty for all tasks in edit mode?
         task_user_add(task, user);
-        task_user_visited_set(task, user);
       }
 
       property_split_start = property_split_end + 1;
@@ -451,9 +425,6 @@ void editor_parse_propertyline(Task_Node* task, char* line_start, int line_worki
   }
 
   else if(memcmp(property_str, "dependent_on", 12) == 0){
-    // TODO list comprehension
-    // TODO update the quantity of dependents in the list also 
-    
     printf("parsing dependencies\n");
     char* property_split_start = value_str;
     char* property_split_end = value_str;
@@ -524,13 +495,9 @@ void editor_parse_text(char* text_start, size_t text_length){
     user_editor_visited[i] = FALSE;
   }
   for (size_t i=0; i<task_allocation_total; ++i){
-    if (tasks[i].trash == FALSE){
-      for (size_t u=0; u<tasks[i].user_qty; ++u){
-        tasks[i].user_visited[u] = FALSE;
-      }
-    }
     if (tasks[i].mode_edit == TRUE){
       tasks[i].dependent_qty = 0;
+      tasks[i].user_qty = 0;
     }
   }
 
