@@ -346,6 +346,46 @@ void editor_users_cleanup(){
 }
 
 
+void editor_parse_task_detect(char* text_start, size_t text_length){
+  printf("[STATUS] PASS 1 editor_parse_task_detect()\n");
+  char* text_end = text_start + text_length;
+  char* line_start = text_start;
+  char* line_end;
+  int line_working_length = 0;
+  Task_Node* task;
+  while (line_start < text_end){
+    line_end = memchr(line_start, (int) '\n', text_end - line_start);
+    if (line_end == NULL){
+      break;
+    }
+    line_working_length = line_end - line_start;
+    if (line_working_length == 0){
+      ++line_start;
+      continue;
+    }
+
+    if (memchr(line_start, (int) '{', line_working_length) != NULL){
+      // TODO check, prevent duplicate task names
+      int task_name_length;
+      char* task_name = string_strip(&task_name_length, line_start, line_working_length);
+      printf("TASK, name '%.*s'\n", task_name_length, task_name);
+
+      // now get a pointer to the task
+      task = task_get(task_name, task_name_length);
+      if (task == NULL){
+        task = task_create(task_name, task_name_length); // TODO is create the right action? maybe parse and then decide? 
+        printf("created task. allocations: %ld of %ld\n", task_allocation_used, task_allocation_total);
+      }
+
+      // mark task as visited
+      task_editor_visited[task - tasks] = TRUE;
+      task->mode_edit = TRUE; // TODO this is a hack since this should be set by the DISPLAY VIEWPORT
+    }
+
+    line_start = line_end + 1;
+  }
+}
+
 // comma to separate values in a list
 void editor_parse_propertyline(Task_Node* task, char* line_start, int line_working_length){
   char* line_end = line_start + line_working_length;
@@ -447,9 +487,6 @@ void editor_parse_propertyline(Task_Node* task, char* line_start, int line_worki
 void editor_parse_text(char* text_start, size_t text_length){
   char* text_end = text_start + text_length;
 
-  // assume starting at top level
-
-  // PASS 1 - just add/remove tasks. TODO
 
   // track difference betweeen seen [tasks, users] and expected to see tasks
   // if you don't see tasks that you expect to.. need to remove those!
@@ -467,8 +504,13 @@ void editor_parse_text(char* text_start, size_t text_length){
     }
   }
 
+  // PASS 1 - just add/remove tasks 
+  editor_parse_task_detect(text_start, text_length);
+
+
   // PASS 2 - all task properties, now you can scrub dependencies TODO
   // read one line at a time
+  printf("[STATUS] PASS 2 working through the properties\n");
   char* line_start = text_start;
   char* line_end;
   int line_working_length = 0;
@@ -484,25 +526,15 @@ void editor_parse_text(char* text_start, size_t text_length){
       continue;
     }
 
+
     if (memchr(line_start, (int) '{', line_working_length) != NULL){
-      // TODO check, prevent duplicate task names
       int task_name_length;
       char* task_name = string_strip(&task_name_length, line_start, line_working_length);
-      printf("TASK, name '%.*s'\n", task_name_length, task_name);
-
-      // now get a pointer to the task
       task = task_get(task_name, task_name_length);
-      if (task == NULL){
-        task = task_create(task_name, task_name_length); // TODO is create the right action? maybe parse and then decide? 
-        printf("created task. allocations: %ld of %ld\n", task_allocation_used, task_allocation_total);
-      }
-
-      // mark task as visited
-      task_editor_visited[task - tasks] = TRUE;
-      task->mode_edit = TRUE; // TODO this is a hack since this should be set by the DISPLAY VIEWPORT
+      assert( task != NULL);
     }
 
-    else if(memchr(line_start, (int) '}', line_working_length) != NULL){
+    else if (memchr(line_start, (int) '}', line_working_length) != NULL){
       printf("line '%.*s' ends a task\n", line_working_length, line_start);
     }
 
