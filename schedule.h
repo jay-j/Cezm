@@ -40,8 +40,8 @@ typedef struct User{
 
 struct Task_Node{
   char* task_name;
-  uint16_t mode; // see TASK_MODE_ constants
   uint8_t trash;
+  uint8_t mode_edit;
 
   User* users[TASK_USERS_MAX];
   uint8_t user_visited[TASK_USERS_MAX];

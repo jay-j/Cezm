@@ -174,6 +174,16 @@ void task_user_add(Task_Node* task, User* user){
 }
 
 
+void task_user_visited_set(Task_Node* task, User* user){
+  for (size_t u=0; u<task->user_qty; ++u){
+    if (task->users[u] == user){
+      task->user_visited[u] = TRUE;
+      break;
+    }
+  }
+}
+
+
 void task_user_remove(Task_Node* task, User* user){
   size_t id = -1;
   for(size_t i=0; i<task->user_qty; ++i){
@@ -182,14 +192,17 @@ void task_user_remove(Task_Node* task, User* user){
       break;
     }
   }
-  printf("need to remove user %s from task %s. userid in that task is %d\n", user->name, task->task_name, id);
-  
-  // now shuffle down all the remaining users, update the qty
-  for (size_t i=id; i<task->user_qty-1; ++i){
-    task->users[i] = task->users[i+1];
-  }
-  task->user_qty -= 1;
 
+  // only continue with removal process if you can find the user
+  if (id != -1){
+    printf("need to remove user %s from task %s. userid in that task is %ld\n", user->name, task->task_name, id);
+    
+    // now shuffle down all the remaining users, update the qty
+    for (size_t i=id; i<task->user_qty-1; ++i){
+      task->users[i] = task->users[i+1];
+    }
+    task->user_qty -= 1;
+  }
 }
 
 
@@ -275,8 +288,10 @@ void editor_tasks_cleanup(){
   // scrub through tasks, remove any that you expected to see but did not
   for (size_t i=0; i<task_allocation_total; ++i){
     if (tasks[i].trash == FALSE){ // if node is NOT trash
-      if (task_editor_visited[i] == FALSE){ // if we did not visit the node this time parsing the text
-        if ((tasks[i].mode & TASK_MODE_EDIT) > 0){ // TODO if this runs so much.. better to have a faster cache lookup?
+      if (tasks[i].mode_edit == TRUE){
+
+        // if we did not visit the node this time parsing the text
+        if (task_editor_visited[i] == FALSE){ 
           tasks[i].trash = TRUE; 
           if (task_allocation_used > 0){
             --task_allocation_used;
@@ -284,9 +299,20 @@ void editor_tasks_cleanup(){
           printf("REMOVING tasks[%ld].name=%s..\n", i, tasks[i].task_name);
           hash_table_remove(task_names_ht, tasks[i].task_name);
         }
+        else{
+
+          // check the task for users that need to be removed from this one task
+          for (size_t u=0; u<tasks[i].user_qty; ++u){
+            if (tasks[i].user_visited[u] == FALSE){
+              task_user_remove(tasks+i, tasks[i].users[u]);
+            }
+          }
+        } 
+
       }
     }
   }
+
   hash_table_print(task_names_ht);
 }
 
@@ -307,6 +333,7 @@ void editor_users_cleanup(){
           }
           printf("REMOVING users[%ld].name=%s..\n", i, users[i].name);
 
+          // user deleted, remove them from all their tasks
           for(size_t j=0; j<users[i].task_qty; ++j){
             task_user_remove(users[i].tasks[j], users+i);
           }
@@ -373,6 +400,7 @@ void editor_parse_propertyline(Task_Node* task, char* line_start, int line_worki
         // assign to the task, if it is not already there
         // TODO later need to scrub to remove users!!
         task_user_add(task, user);
+        task_user_visited_set(task, user);
       }
 
       property_split_start = property_split_end + 1;
@@ -431,6 +459,13 @@ void editor_parse_text(char* text_start, size_t text_length){
   for (size_t i=0; i<user_allocation_total; ++i){
     user_editor_visited[i] = FALSE;
   }
+  for (size_t i=0; i<task_allocation_total; ++i){
+    if (tasks[i].trash == FALSE){
+      for (size_t u=0; u<tasks[i].user_qty; ++u){
+        tasks[i].user_visited[u] = FALSE;
+      }
+    }
+  }
 
   // PASS 2 - all task properties, now you can scrub dependencies TODO
   // read one line at a time
@@ -464,7 +499,7 @@ void editor_parse_text(char* text_start, size_t text_length){
 
       // mark task as visited
       task_editor_visited[task - tasks] = TRUE;
-      task->mode |= TASK_MODE_EDIT; // TODO this is a hack since this should be set by the DISPLAY VIEWPORT
+      task->mode_edit = TRUE; // TODO this is a hack since this should be set by the DISPLAY VIEWPORT
     }
 
     else if(memchr(line_start, (int) '}', line_working_length) != NULL){
