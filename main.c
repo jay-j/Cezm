@@ -368,6 +368,52 @@ void editor_parse_task_detect(char* text_start, size_t text_length){
   }
 }
 
+
+uint64_t editor_parse_date(char* value_str, int value_str_length){
+  struct tm timeinfo;
+
+  char* line_end = value_str + value_str_length;
+
+  // separate year from month
+  char* split1 = memchr(value_str, (int) '-', value_str_length);
+  if (split1 != NULL){
+    timeinfo.tm_year = strtol(value_str, &split1, 10);
+
+    // separate month from day
+    char* split2 = memchr(split1+1, (int) '-', value_str_length - (split1 - value_str) - 1);
+    if (split2 != NULL){
+      timeinfo.tm_mon = strtol(split1+1, &split2, 10);
+      timeinfo.tm_mday = strtol(split2+1, &line_end, 10);
+    }
+    // can't find a day, use start of the month as default
+    else{
+      timeinfo.tm_mon = strtol(split1+1, &line_end, 10);
+      timeinfo.tm_mday = 1;
+    }
+  }
+
+  // can't find a month (or day), use start as default
+  else{
+    timeinfo.tm_year = strtol(value_str, &line_end, 10);
+    timeinfo.tm_mon = 1;
+    timeinfo.tm_mday = 1;
+  }
+
+  // now convert that into epoch time..
+  timeinfo.tm_sec = 0;
+  timeinfo.tm_min = 0;
+  timeinfo.tm_hour = 0;
+  time_t date_epoch = mktime(&timeinfo);
+
+  uint64_t day = (uint64_t) date_epoch / 86400;
+
+  //printf("Year: %d\n", timeinfo.tm_year);
+  //printf("Month: %d\n", timeinfo.tm_mon);
+  //printf("Day: %d\n", timeinfo.tm_mday);
+
+  return day;
+}
+
 // comma to separate values in a list
 void editor_parse_propertyline(Task_Node* task, char* line_start, int line_working_length){
   char* line_end = line_start + line_working_length;
@@ -403,11 +449,7 @@ void editor_parse_propertyline(Task_Node* task, char* line_start, int line_worki
         User* user = user_get(value, value_length);
         if (user == NULL){
           printf("user: '%.*s' NEW!\n", value_length, value);
-          user = user_create(value, value_length); // TODO actually create this user
-          // track which line the cursor is on? interact with those values differently?
-          // periodic cleanup function? index matters, rely on the structure of the text, there can't be extra users!
-          // mark ones in editor as untrustworthy, check they still exist? 
-          // does this problem also apply to activity names?
+          user = user_create(value, value_length); 
         }
         else{
           printf("user: '%.*s'\n", value_length, value);
@@ -451,17 +493,22 @@ void editor_parse_propertyline(Task_Node* task, char* line_start, int line_worki
 
       property_split_start = property_split_end + 1;
     }
-
   }
+
   else if(memcmp(property_str, "duration", 8) == 0){
     int duration = atoi(value_str);
     task->day_duration = duration;
     task->schedule_constraints |= SCHEDULE_CONSTRAINT_DURATION;
   }
   else if(memcmp(property_str, "fixed_start", 11) == 0){
-    // TODO date comprehension, storage
     task->schedule_constraints |= SCHEDULE_CONSTRAINT_START;
+    task->day_start = editor_parse_date(value_str, value_str_length);
   }
+  else if(memcmp(property_str, "fixed_end", 9) == 0){
+    task->schedule_constraints |= SCHEDULE_CONSTRAINT_END;
+    task->day_end = editor_parse_date(value_str, value_str_length);
+  }
+
   else if(memcmp(property_str, "color", 5) == 0){
     int color = atoi(value_str);
     if ((color > 9) || (color < 0)){
@@ -469,6 +516,7 @@ void editor_parse_propertyline(Task_Node* task, char* line_start, int line_worki
     }
     task->status_color = color;
   }
+
   else{
     printf("[WARNING] PROPERTY %.*s NOT RECOGNIZED\n", property_str_length, property_str);
   }
