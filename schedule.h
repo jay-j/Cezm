@@ -126,8 +126,30 @@ void status_color_init(){
   }
 }
 
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+typedef struct TextBuffer{
+  char* text;
+  int length;
+  int* line_length; // [pointer to lineA start] + [line_length A] = [pointer to lineB start]
+  int lines;
+} TextBuffer;
+
+typedef struct TextCursor{
+  int pos;
+  int x;
+  int y;
+} TextCursor;
+
+enum TEXTCURSOR_MOVE_DIR {
+  TEXTCURSOR_MOVE_DIR_RIGHT,
+  TEXTCURSOR_MOVE_DIR_LEFT,
+  TEXTCURSOR_MOVE_DIR_UP,
+  TEXTCURSOR_MOVE_DIR_DOWN
+};
 
 
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 // how does scheduling work? 
 // have a graph structure problem

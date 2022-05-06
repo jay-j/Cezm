@@ -477,17 +477,13 @@ void editor_parse_propertyline(Task_Node* task, char* line_start, int line_worki
  
 
 // in edit mode, lock the Activity_Node ids that are being shown in the edit pane.
-// TODO how does this function return information?
-// or... just modify the full network directly. and then from the full network export the full text
-
-// automatically delete/re-add everything being edited in edit mode? assume all those nodes selected are trashed and revised. 
+// modify the full network directly. automatically delete/re-add everything being edited in edit mode. assume all those nodes selected are trashed and revised. 
 // how to balance reparsing everything at 100Hz and only reparsing what is needed? maybe use the cursor to direct efforts? only reparse from scratch the node the cursor is in
 void editor_parse_text(char* text_start, size_t text_length){
   char* text_end = text_start + text_length;
 
-
   // track difference betweeen seen [tasks, users] and expected to see tasks
-  // if you don't see tasks that you expect to.. need to remove those!
+  // if you don't see items that you expect to.. need to remove those!
   for (size_t i=0; i<task_allocation_total; ++i){
     task_editor_visited[i] = FALSE;
   }
@@ -503,7 +499,6 @@ void editor_parse_text(char* text_start, size_t text_length){
 
   // PASS 1 - just add/remove tasks 
   editor_parse_task_detect(text_start, text_length);
-
 
   // PASS 2 - all task properties, now you can scrub dependencies TODO
   // read one line at a time
@@ -523,7 +518,6 @@ void editor_parse_text(char* text_start, size_t text_length){
       continue;
     }
 
-
     if (memchr(line_start, (int) '{', line_working_length) != NULL){
       int task_name_length;
       char* task_name = string_strip(&task_name_length, line_start, line_working_length);
@@ -537,10 +531,6 @@ void editor_parse_text(char* text_start, size_t text_length){
 
     else if(memchr(line_start, (int) ':', line_working_length) != NULL){
       editor_parse_propertyline(task, line_start, line_working_length);
-
-      // then with in each can have custom logic for parsing. lists, dates parsing, string vs numeric values
-
-      // TODO need to track what the cursor is currently editing? 
     }
 
     // advance to the next line
@@ -555,12 +545,11 @@ void editor_parse_text(char* text_start, size_t text_length){
 
   printf("[STATUS] Finished parsing text this round\n");
 
-
   // TODO add better error handling warning stuff
 }
 
 
-void node_to_text(){
+void editor_generate_text(TextBuffer* text_buffer){
   // flag to do optioanl stuff? 
   // how to denote cursor? 
 
@@ -713,27 +702,6 @@ void sdlj_textbox_render(SDL_Renderer* render, TextBox* textbox, char* text){
 
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-typedef struct TextBuffer{
-  char* text;
-  int length;
-  int* line_length; // [pointer to lineA start] + [line_length A] = [pointer to lineB start]
-  int lines;
-} TextBuffer;
-
-typedef struct TextCursor{
-  int pos;
-  int x;
-  int y;
-} TextCursor;
-
-enum TEXTCURSOR_MOVE_DIR {
-  TEXTCURSOR_MOVE_DIR_RIGHT,
-  TEXTCURSOR_MOVE_DIR_LEFT,
-  TEXTCURSOR_MOVE_DIR_UP,
-  TEXTCURSOR_MOVE_DIR_DOWN
-};
-
 
 TextBuffer* editor_buffer_init(){
   TextBuffer* tb = (TextBuffer*) malloc(sizeof(TextBuffer));
