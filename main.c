@@ -16,11 +16,8 @@
 #include "utilities-c/hash_lib/hashtable.h"
 
 // global
-#define FALSE 0
-#define TRUE 1
-
-#define WINDOW_WIDTH 1200
-#define WINDOW_HEIGHT 800
+#define WINDOW_WIDTH 1400
+#define WINDOW_HEIGHT 900
 #define FONTSIZE 16
 
 // modal switching
@@ -56,7 +53,7 @@ HashTable* users_ht;
 
 void tasks_init(){
   tasks = (Task_Node*) malloc(task_allocation_total * sizeof(Task_Node));
-  task_names_ht = hash_table_create(8192, HT_FREE_KEY); // TODO hard code because otherwise trigger frequent re-hash of the whole thing..
+  task_names_ht = hash_table_create(HT_TASKS_MAX, HT_FREE_KEY);
 
   for (size_t i=0; i<task_allocation_total; ++i){
     tasks[i].trash = TRUE;
@@ -71,7 +68,7 @@ void tasks_init(){
   for (size_t i=0; i<user_allocation_total; ++i){
     users[i].trash = TRUE;
   }
-  users_ht = hash_table_create(1024, HT_FREE_KEY);
+  users_ht = hash_table_create(HT_USERS_MAX, HT_FREE_KEY);
   user_editor_visited = (uint8_t*) malloc(user_allocation_total * sizeof(uint8_t));
   memset(user_editor_visited, 0, user_allocation_total);
 }
@@ -598,6 +595,7 @@ void editor_parse_text(char* text_start, size_t text_length){
 
 
 void editor_generate_text(TextBuffer* text_buffer){
+  text_buffer->length = 1; // TODO
   // flag to do optioanl stuff? 
   // how to denote cursor? 
 

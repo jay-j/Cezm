@@ -1,5 +1,12 @@
 #include <stdint.h>
 
+#define FALSE 0
+#define TRUE 1
+
+// maximum possible number of tasks and users hardcoded since I don't have a hashtable-resizing function
+#define HT_TASKS_MAX 8192
+#define HT_USERS_MAX 1024
+
 // a single task may be worked by up to 8 users
 #define TASK_USERS_MAX 8
 #define TASK_DEPENDENCIES_MAX 64
@@ -12,6 +19,7 @@
 #define SCHEDULE_CONSTRAINT_START (1)
 #define SCHEDULE_CONSTRAINT_DURATION (1<<1)
 #define SCHEDULE_CONSTRAINT_END (1<<2)
+#define SCHEDULE_CONSTRAINT_NOSOONER (1<<3)
 
 // a user may be assigned a maximum of 1024 tasks
 #define USER_TASKS_MAX 1024
@@ -33,10 +41,7 @@ typedef struct User{
   size_t column_index; // display column
 } User;
 
-// build a crazy hash table out of nodes? name -> id?
-// how to smartly handle renaming? 
-// TODO rename symbol button
-
+// how to smartly handle renaming? TODO rename symbol button
 
 struct Task_Node{
   char* task_name;
@@ -170,7 +175,62 @@ enum TEXTCURSOR_MOVE_DIR {
 // keep track of two paths. one is the current (WIP) path. the other is the best solution path found to date. best being shortest total duration
 //
 
-struct Schedule_Event {
-  size_t date;
+typedef struct Schedule_Event {
+  uint64_t date;
   Task_Node* task;
-};
+} Schedule_Event;
+
+typedef struct Schedule_Event_List {
+  size_t qty;
+  size_t qty_max;
+  uint8_t solved;
+  struct Schedule_Event* events;
+} Schedule_Event_List;
+
+
+Schedule_Event_List* schedule_create(){
+  Schedule_Event_List* schedule = (Schedule_Event_List*) malloc(sizeof(Schedule_Event_List));
+  schedule->qty = 0;
+  schedule->qty_max = 64;
+  schedule->events = (Schedule_Event*) malloc(schedule->qty_max * sizeof(Schedule_Event));
+  schedule->solved = FALSE;
+  return schedule;
+}
+
+void schedule_memory_management(Schedule_Event_List* schedule){
+  if (schedule->qty >= schedule->qty_max){
+    printf("[CAUTION] SCHEDULE MEMORY MANAGEMENT ACTIVATED, INCREASING MEMORY ALLOCATIONS\n");
+    schedule->qty_max *= 1.5;
+    schedule->events = (Schedule_Event*) realloc(schedule->events, schedule->qty_max * sizeof(Schedule_Event));
+  }
+}
+
+void schedule_free(Schedule_Event_List* schedule){
+  free(schedule->events);
+  free(schedule);
+}
+
+
+int schedule_solve(Task_Node* tasks, Schedule_Event_List* schedule_best, Schedule_Event_List* schedule_working){
+  // reset previous search efforts
+  schedule_best->qty = 0;
+  schedule_working->qty = 0;
+
+  for (size_t t=0; t<task_allocation_total; ++t){
+    if (tasks[t].dependent_qty == 0){
+      // TODO put it on the open list!
+    }
+  }
+  // find tasks with no dependencies and fixed_start constraints to initiate the search
+  // for each of these....
+
+  // list active tasks?
+  // store user free/busy state? 
+  // calculate actual start and end dates for the task. don't overwrite given constraints
+  
+  // advance day by one, try to see if there are any tasks which can now be started
+  // maintain an 'active' list of tasks that can be attempted. 
+
+
+  return 0;
+}
