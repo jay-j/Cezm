@@ -1,7 +1,12 @@
 #include <stdint.h>
+#include "utilities-c/hash_lib/hashtable.h"
 
 #define FALSE 0
 #define TRUE 1
+
+// A generic container for storing user or task data
+// data is a reserved memory block, the hash table turns the human-readable string into an index of data[]
+// allocation-used vs. allocation_total tracking allows for infrequent reallocs
 
 // maximum possible number of tasks and users hardcoded since I don't have a hashtable-resizing function
 #define HT_TASKS_MAX 8192
@@ -24,7 +29,7 @@
 // a user may be assigned a maximum of 1024 tasks
 #define USER_TASKS_MAX 1024
 
-typedef struct Task_Node Task_Node;
+typedef struct Task Task;
 
 typedef struct User{
   char* name;
@@ -33,7 +38,7 @@ typedef struct User{
   uint8_t visited; // if TRUE, have seen this user this round
 
   // network properties
-  Task_Node* tasks[USER_TASKS_MAX];
+  Task* tasks[USER_TASKS_MAX];
   size_t task_qty;
 
   // display properties
@@ -41,9 +46,18 @@ typedef struct User{
   size_t column_index; // display column
 } User;
 
+typedef struct User_Memory{
+  User* users;
+  HashTable* hashtable;
+  size_t allocation_total;
+  size_t allocation_used;
+  size_t last_created;
+  uint8_t* editor_visited;
+} User_Memory;
+
 // how to smartly handle renaming? TODO rename symbol button
 
-struct Task_Node{
+struct Task{
   char* task_name;
   uint8_t trash;
   uint8_t mode_edit;
@@ -51,7 +65,7 @@ struct Task_Node{
   User* users[TASK_USERS_MAX];
   size_t user_qty;
 
-  Task_Node* dependents[TASK_DEPENDENCIES_MAX];
+  Task* dependents[TASK_DEPENDENCIES_MAX];
   size_t dependent_qty;
 
   uint64_t schedule_constraints;
@@ -63,13 +77,23 @@ struct Task_Node{
   uint16_t subsystem_id;
 
   // DERIVED VARIABLES BELOW THIS LINE
-  Task_Node* prerequisites[TASK_DEPENDENCIES_MAX];
+  Task* prerequisites[TASK_DEPENDENCIES_MAX];
   size_t prerequisite_qty;
   
   // WORKING PROPERTIES
   // selected by cursor?
 
 };
+
+typedef struct Task_Memory{
+  Task* tasks;
+  HashTable* hashtable;
+  size_t allocation_total;
+  size_t allocation_used;
+  size_t last_created;
+  uint8_t* editor_visited;
+} Task_Memory;
+
 
 // track the quantity of activities created, to just increment forever. don't worry about re-use and abandoning old numbers
 // how to keep memory use efficient? don't care about (un)mallocing new items since this is infrequent? 
@@ -177,7 +201,7 @@ enum TEXTCURSOR_MOVE_DIR {
 
 typedef struct Schedule_Event {
   uint64_t date;
-  Task_Node* task;
+  Task* task;
 } Schedule_Event;
 
 typedef struct Schedule_Event_List {
@@ -211,12 +235,13 @@ void schedule_free(Schedule_Event_List* schedule){
 }
 
 
-int schedule_solve(Task_Node* tasks, Schedule_Event_List* schedule_best, Schedule_Event_List* schedule_working){
+int schedule_solve(Task_Memory* task_memory, User_Memory* user_memory, Schedule_Event_List* schedule_best, Schedule_Event_List* schedule_working){
+  Task* tasks = task_memory->tasks;
   // reset previous search efforts
   schedule_best->qty = 0;
   schedule_working->qty = 0;
 
-  for (size_t t=0; t<task_allocation_total; ++t){
+  for (size_t t=0; t<task_memory->allocation_total; ++t){
     if (tasks[t].dependent_qty == 0){
       // TODO put it on the open list!
     }

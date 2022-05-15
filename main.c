@@ -35,72 +35,61 @@ TTF_Font* global_font = NULL;
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-// the main table of all tasks
-Task_Node* tasks;
-size_t task_allocation_used = 0;
-size_t task_allocation_total = 128;
-size_t task_last_created = 0;
-uint8_t* task_editor_visited;
+void tasks_init(Task_Memory* task_memory, User_Memory* user_memory){
+  task_memory->allocation_total = 64;
+  task_memory->allocation_used = 0;
+  task_memory->tasks = (Task*) malloc(task_memory->allocation_total * sizeof(Task));
+  task_memory->hashtable = hash_table_create(HT_TASKS_MAX, HT_FREE_KEY);
 
-User* users;
-size_t user_allocation_used = 0;
-size_t user_allocation_total = 16;
-size_t user_last_created = 0;
-uint8_t* user_editor_visited;
-
-HashTable* task_names_ht;
-HashTable* users_ht;
-
-void tasks_init(){
-  tasks = (Task_Node*) malloc(task_allocation_total * sizeof(Task_Node));
-  task_names_ht = hash_table_create(HT_TASKS_MAX, HT_FREE_KEY);
-
-  for (size_t i=0; i<task_allocation_total; ++i){
-    tasks[i].trash = TRUE;
+  for (size_t i=0; i<task_memory->allocation_total; ++i){
+    task_memory->tasks[i].trash = TRUE;
   }
-  task_editor_visited = (uint8_t*) malloc(task_allocation_total * sizeof(uint8_t));
-  memset(task_editor_visited, 0, task_allocation_total);
-  printf("Task init() complete for %ld tasks\n", task_allocation_total);
+  task_memory->editor_visited = (uint8_t*) malloc(task_memory->allocation_total * sizeof(uint8_t));
+  memset(task_memory->editor_visited, 0, task_memory->allocation_total);
+  printf("Task init() complete for %ld tasks\n", task_memory->allocation_total);
 
   status_color_init();
 
-  users = (User*) malloc(user_allocation_total * sizeof(User));
-  for (size_t i=0; i<user_allocation_total; ++i){
-    users[i].trash = TRUE;
+  user_memory->allocation_total = 8;
+  user_memory->allocation_used = 0;
+  user_memory->users = (User*) malloc(user_memory->allocation_total * sizeof(User));
+  for (size_t i=0; i<user_memory->allocation_total; ++i){
+    user_memory->users[i].trash = TRUE;
   }
-  users_ht = hash_table_create(HT_USERS_MAX, HT_FREE_KEY);
-  user_editor_visited = (uint8_t*) malloc(user_allocation_total * sizeof(uint8_t));
-  memset(user_editor_visited, 0, user_allocation_total);
+  user_memory->hashtable = hash_table_create(HT_USERS_MAX, HT_FREE_KEY);
+  user_memory->editor_visited = (uint8_t*) malloc(user_memory->allocation_total * sizeof(uint8_t));
+  memset(user_memory->editor_visited, 0, user_memory->allocation_total);
 }
 
 
-void tasks_free(){
+void tasks_free(Task_Memory* task_memory, User_Memory* user_memory){
   printf("[STATUS] FREEING TASK TABLE\n");
-  hash_table_print(task_names_ht);
-  hash_table_destroy(task_names_ht);
-  hash_table_print(users_ht);
-  hash_table_destroy(users_ht); 
-  free(tasks);
-  free(task_editor_visited);
-  free(user_editor_visited);
-  free(users);
+  hash_table_print(task_memory->hashtable);
+  hash_table_destroy(task_memory->hashtable);
+  free(task_memory->tasks);
+  free(task_memory->editor_visited);
+
+  hash_table_print(user_memory->hashtable);
+  hash_table_destroy(user_memory->hashtable); 
+  free(user_memory->users);
+  free(user_memory->editor_visited);
 }
 
 
 // grow memory as needed to hold allocated tasks
 // don't shrink - avoid having to search and move active nodes into lower memory space in realtime
 // if needed user could save and restart to reduce memory footprint
-void task_memory_management(){
-  if (task_allocation_used >= task_allocation_total){
+void task_memory_management(Task_Memory* tm){
+  if (tm->allocation_used >= tm->allocation_total){
     printf("[CAUTION] TASK MEMORY MANAGEMENT ACTIVATED, INCREASING MEMORY ALLOCATIONS\n");
-    uint64_t task_allocation_old = task_allocation_total;
-    task_allocation_total *= 1.5;
-    tasks = (Task_Node*) realloc(tasks, task_allocation_total * sizeof(Task_Node));
-    task_editor_visited = (uint8_t*) realloc(task_editor_visited, task_allocation_total * sizeof(uint8_t));
+    uint64_t task_allocation_old = tm->allocation_total;
+    tm->allocation_total *= 1.5;
+    tm->tasks = (Task*) realloc(tm->tasks, tm->allocation_total * sizeof(Task));
+    tm->editor_visited = (uint8_t*) realloc(tm->editor_visited, tm->allocation_total * sizeof(uint8_t));
 
-    for (size_t i=task_allocation_old; i<task_allocation_total; ++i){
-      tasks[i].trash = TRUE;
-      task_editor_visited[i] = FALSE;
+    for (size_t i=task_allocation_old; i<tm->allocation_total; ++i){
+      tm->tasks[i].trash = TRUE;
+      tm->editor_visited[i] = FALSE;
     }
   }
 
@@ -108,44 +97,46 @@ void task_memory_management(){
 }
 
 
-Task_Node* task_create(char* task_name, size_t task_name_length){
+Task* task_create(Task_Memory* task_memory, char* task_name, size_t task_name_length){
+  Task* tasks = task_memory->tasks;
+
   // find an empty slot to use for the task
   do {
-    task_last_created = (task_last_created + 1) % task_allocation_total;
-  } while (tasks[task_last_created].trash == FALSE);
-  ++task_allocation_used;
+    task_memory->last_created = (task_memory->last_created + 1) % task_memory->allocation_total;
+  } while (tasks[task_memory->last_created].trash == FALSE);
+  task_memory->allocation_used += 1;
 
-  Task_Node* task = (tasks + task_last_created);
+  Task* task = (tasks + task_memory->last_created);
 
   // zero everything there. also brings mode out of trash mode
-  memset((void*) task, 0, sizeof(Task_Node));
+  memset((void*) task, 0, sizeof(Task));
   task->trash = FALSE;
   
   // add to hash table
   char* name = (char*) malloc(task_name_length+1);
   memcpy(name, task_name, task_name_length);
   name[task_name_length] = '\0';
-  hash_table_insert(task_names_ht, name, (void*) task);
+  hash_table_insert(task_memory->hashtable, name, (void*) task);
   task->task_name = name;
 
   return task;
 }
 
 
-Task_Node* task_get(char* task_name, int task_name_length){
+Task* task_get(Task_Memory* task_memory, char* task_name, int task_name_length){
   // use the hash table to find a pointer to the task based on the string name the user gives
   // return NULL if the task does not exist and needs to be created
   char name[128]; // TODO
   assert(task_name_length < 128);
   memcpy(name, task_name, task_name_length);
   name[task_name_length] = '\0';
-  Task_Node* task = (Task_Node*) hash_table_get(task_names_ht, name);
+  Task* task = (Task*) hash_table_get(task_memory->hashtable, name);
   return task;
 }
 
 
 // check if the given user is already assigned to the given task
-uint8_t task_user_has(Task_Node* task, User* user){
+uint8_t task_user_has(Task* task, User* user){
   uint8_t result = FALSE;
   for(size_t i=0; i<task->user_qty; ++i){
     if (task->users[i] == user){
@@ -157,7 +148,7 @@ uint8_t task_user_has(Task_Node* task, User* user){
 
 
 // add user to task if user is not already there
-void task_user_add(Task_Node* task, User* user){
+void task_user_add(Task* task, User* user){
   assert(task->user_qty < TASK_USERS_MAX);
   assert(user->task_qty < USER_TASKS_MAX);
 
@@ -171,7 +162,7 @@ void task_user_add(Task_Node* task, User* user){
 }
 
 
-void task_user_remove(Task_Node* task, User* user){
+void task_user_remove(Task* task, User* user){
   size_t id = 0;
   uint8_t found = 0;
   for(size_t i=0; i<task->user_qty; ++i){
@@ -197,29 +188,29 @@ void task_user_remove(Task_Node* task, User* user){
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-void user_memory_management(){
-  if (user_allocation_used >= user_allocation_total){
+void user_memory_management(User_Memory* um){
+  if (um->allocation_used >= um->allocation_total){
     printf("[CAUTION] USER MEMORY MANAGEMENT ACTIVATED, INCREASING MEMORY ALLOCATIONS\n");
-    uint64_t user_allocation_old = user_allocation_total;
-    user_allocation_total *= 1.5;
-    users = (User*) realloc(users, user_allocation_total * sizeof(User));
+    uint64_t user_allocation_old = um->allocation_total;
+    um->allocation_total *= 1.5;
+    um->users = (User*) realloc(um->users, um->allocation_total * sizeof(User));
 
-    for (size_t i=user_allocation_old; i<user_allocation_total; ++i){
-      users[i].trash = TRUE;
-      user_editor_visited[i] = FALSE;
+    for (size_t i=user_allocation_old; i<um->allocation_total; ++i){
+      um->users[i].trash = TRUE;
+      um->editor_visited[i] = FALSE;
     }
   }
 }
 
 
-User* user_create(char* user_name, size_t name_length){
-  user_memory_management();
+User* user_create(User_Memory* user_memory, char* user_name, size_t name_length){
+  user_memory_management(user_memory);
   // find an empty user slot to use
   do {
-    user_last_created = (user_last_created + 1) % user_allocation_total;
-  } while(users[user_last_created].trash == FALSE);
-  User* user = users + user_last_created;
-  ++user_allocation_used;
+    user_memory->last_created = (user_memory->last_created + 1) % user_memory->allocation_total;
+  } while(user_memory->users[user_memory->last_created].trash == FALSE);
+  User* user = user_memory->users + user_memory->last_created;
+  user_memory->allocation_used += 1;
 
   // zero everything there
   memset((void*) user, 0, sizeof(User));
@@ -228,20 +219,20 @@ User* user_create(char* user_name, size_t name_length){
   char* name = (char*) malloc(name_length+1);
   memcpy(name, user_name, name_length);
   name[name_length] = '\0';
-  hash_table_insert(users_ht, name, (void*) user);
+  hash_table_insert(user_memory->hashtable, name, (void*) user);
   user->name = name;
 
   return user;
 }
 
 
-User* user_get(char* user_name, int user_name_length){
+User* user_get(User_Memory* user_memory, char* user_name, int user_name_length){
   // use the hash table to find a pointer to the user based on the string given
   // return NULL if does not exist and needs to be created
   char name[128]; // TODO
   memcpy(name, user_name, user_name_length);
   name[user_name_length] = '\0';
-  User* user = (User*) hash_table_get(users_ht, name);
+  User* user = (User*) hash_table_get(user_memory->hashtable, name);
   return user;
 }
 
@@ -273,42 +264,45 @@ char* string_strip(int* result_length, char* str, int str_length){
 }
 
 
-void editor_tasks_cleanup(){
+void editor_tasks_cleanup(Task_Memory* task_memory){
+  Task* tasks = task_memory->tasks;
   // scrub through tasks, remove any that you expected to see but did not
-  for (size_t i=0; i<task_allocation_total; ++i){
+  for (size_t i=0; i<task_memory->allocation_total; ++i){
     if (tasks[i].trash == FALSE){ // if node is NOT trash
       if (tasks[i].mode_edit == TRUE){
 
         // if we did not visit the node this time parsing the text
-        if (task_editor_visited[i] == FALSE){ 
+        if (task_memory->editor_visited[i] == FALSE){ 
           tasks[i].trash = TRUE; 
-          if (task_allocation_used > 0){
-            --task_allocation_used;
+          if (task_memory->allocation_used > 0){
+            task_memory->allocation_used -= 1;
           }
           printf("REMOVING tasks[%ld].name=%s..\n", i, tasks[i].task_name);
-          hash_table_remove(task_names_ht, tasks[i].task_name);
+          hash_table_remove(task_memory->hashtable, tasks[i].task_name);
         }
       }
     }
   }
 
-  hash_table_print(task_names_ht);
+  hash_table_print(task_memory->hashtable);
 }
 
 
 // TODO this has a bug.. not removing tasks from users properly when that user is removed from one task but still has other valid tasks
 // don't track seen user? track seen task.user? 
-void editor_users_cleanup(){
+void editor_users_cleanup(User_Memory* user_memory){
+  User* users = user_memory->users;
+
   // scrub through users, remove any that you expected to see but did not
-  for (size_t i=0; i<user_allocation_total; ++i){
+  for (size_t i=0; i<user_memory->allocation_total; ++i){
     if(users[i].trash == FALSE){
-      if (user_editor_visited[i] == FALSE){
+      if (user_memory->editor_visited[i] == FALSE){
 
         if (users[i].mode_edit == TRUE){
           // this user was expected to be seen upon parsing but was not; delete them!!
           users[i].trash = TRUE;
-          if (user_allocation_used > 0){
-            --user_allocation_used;
+          if (user_memory->allocation_used > 0){
+            user_memory->allocation_used -= 1;
           }
           printf("REMOVING users[%ld].name=%s..\n", i, users[i].name);
 
@@ -317,7 +311,7 @@ void editor_users_cleanup(){
             task_user_remove(users[i].tasks[j], users+i);
           }
 
-          hash_table_remove(users_ht, users[i].name);
+          hash_table_remove(user_memory->hashtable, users[i].name);
         }
       }
     }
@@ -325,13 +319,13 @@ void editor_users_cleanup(){
 }
 
 
-void editor_parse_task_detect(char* text_start, size_t text_length){
+void editor_parse_task_detect(Task_Memory* task_memory, char* text_start, size_t text_length){
   printf("[STATUS] PASS 1 editor_parse_task_detect()\n");
   char* text_end = text_start + text_length;
   char* line_start = text_start;
   char* line_end;
   int line_working_length = 0;
-  Task_Node* task;
+  Task* task;
   while (line_start < text_end){
     line_end = memchr(line_start, (int) '\n', text_end - line_start);
     if (line_end == NULL){
@@ -350,14 +344,14 @@ void editor_parse_task_detect(char* text_start, size_t text_length){
       printf("TASK, name '%.*s'\n", task_name_length, task_name);
 
       // now get a pointer to the task
-      task = task_get(task_name, task_name_length);
+      task = task_get(task_memory, task_name, task_name_length);
       if (task == NULL){
-        task = task_create(task_name, task_name_length); // TODO is create the right action? maybe parse and then decide? 
-        printf("created task. allocations: %ld of %ld\n", task_allocation_used, task_allocation_total);
+        task = task_create(task_memory, task_name, task_name_length); // TODO is create the right action? maybe parse and then decide? 
+        printf("created task. allocations: %ld of %ld\n", task_memory->allocation_used, task_memory->allocation_total);
       }
 
       // mark task as visited
-      task_editor_visited[task - tasks] = TRUE;
+      task_memory->editor_visited[task - task_memory->tasks] = TRUE;
       task->mode_edit = TRUE; // TODO this is a hack since this should be set by the DISPLAY VIEWPORT
     }
 
@@ -412,7 +406,7 @@ uint64_t editor_parse_date(char* value_str, int value_str_length){
 }
 
 // comma to separate values in a list
-void editor_parse_propertyline(Task_Node* task, char* line_start, int line_working_length){
+void editor_parse_propertyline(Task_Memory* task_memory, User_Memory* user_memory, Task* task, char* line_start, int line_working_length){
   char* line_end = line_start + line_working_length;
   // split into property and value parts. split on ':'
   char* split = memchr(line_start, (int) ':', line_working_length);
@@ -443,17 +437,17 @@ void editor_parse_propertyline(Task_Node* task, char* line_start, int line_worki
       int value_length;
       char* value = string_strip(&value_length, property_split_start, property_split_end - property_split_start);
       if (value_length > 0){
-        User* user = user_get(value, value_length);
+        User* user = user_get(user_memory, value, value_length);
         if (user == NULL){
           printf("user: '%.*s' NEW!\n", value_length, value);
-          user = user_create(value, value_length); 
+          user = user_create(user_memory, value, value_length); 
         }
         else{
           printf("user: '%.*s'\n", value_length, value);
         }
         user->trash = FALSE;
         user->mode_edit = TRUE;
-        user_editor_visited[user - users] = TRUE;
+        user_memory->editor_visited[user - user_memory->users] = TRUE;
 
         // assign to the task, if it is not already there
         task_user_add(task, user);
@@ -478,7 +472,7 @@ void editor_parse_propertyline(Task_Node* task, char* line_start, int line_worki
       int value_length;
       char* value = string_strip(&value_length, property_split_start, property_split_end - property_split_start);
       if (value_length > 0){
-        Task_Node* dep = task_get(value, value_length);
+        Task* dep = task_get(task_memory, value, value_length);
         if (dep != NULL){
           task->dependents[task->dependent_qty] = dep;
           task->dependent_qty += 1;
@@ -524,18 +518,19 @@ void editor_parse_propertyline(Task_Node* task, char* line_start, int line_worki
 // in edit mode, lock the Activity_Node ids that are being shown in the edit pane.
 // modify the full network directly. automatically delete/re-add everything being edited in edit mode. assume all those nodes selected are trashed and revised. 
 // how to balance reparsing everything at 100Hz and only reparsing what is needed? maybe use the cursor to direct efforts? only reparse from scratch the node the cursor is in
-void editor_parse_text(char* text_start, size_t text_length){
+void editor_parse_text(Task_Memory* task_memory, User_Memory* user_memory, char* text_start, size_t text_length){
   char* text_end = text_start + text_length;
+  Task* tasks = task_memory->tasks;
 
   // track difference betweeen seen [tasks, users] and expected to see tasks
   // if you don't see items that you expect to.. need to remove those!
-  for (size_t i=0; i<task_allocation_total; ++i){
-    task_editor_visited[i] = FALSE;
+  for (size_t i=0; i<task_memory->allocation_total; ++i){
+    task_memory->editor_visited[i] = FALSE;
   }
-  for (size_t i=0; i<user_allocation_total; ++i){
-    user_editor_visited[i] = FALSE;
+  for (size_t i=0; i<user_memory->allocation_total; ++i){
+    user_memory->editor_visited[i] = FALSE;
   }
-  for (size_t i=0; i<task_allocation_total; ++i){
+  for (size_t i=0; i<task_memory->allocation_total; ++i){
     if (tasks[i].mode_edit == TRUE){
       tasks[i].dependent_qty = 0;
       tasks[i].user_qty = 0;
@@ -543,7 +538,7 @@ void editor_parse_text(char* text_start, size_t text_length){
   }
 
   // PASS 1 - just add/remove tasks 
-  editor_parse_task_detect(text_start, text_length);
+  editor_parse_task_detect(task_memory, text_start, text_length);
 
   // PASS 2 - all task properties, now you can scrub dependencies TODO
   // read one line at a time
@@ -551,7 +546,7 @@ void editor_parse_text(char* text_start, size_t text_length){
   char* line_start = text_start;
   char* line_end;
   int line_working_length = 0;
-  Task_Node* task;
+  Task* task;
   while (line_start < text_end){
     line_end = memchr(line_start, (int) '\n', text_end - line_start);
     if (line_end == NULL){
@@ -566,7 +561,7 @@ void editor_parse_text(char* text_start, size_t text_length){
     if (memchr(line_start, (int) '{', line_working_length) != NULL){
       int task_name_length;
       char* task_name = string_strip(&task_name_length, line_start, line_working_length);
-      task = task_get(task_name, task_name_length);
+      task = task_get(task_memory, task_name, task_name_length);
       assert( task != NULL);
     }
 
@@ -575,7 +570,7 @@ void editor_parse_text(char* text_start, size_t text_length){
     }
 
     else if(memchr(line_start, (int) ':', line_working_length) != NULL){
-      editor_parse_propertyline(task, line_start, line_working_length);
+      editor_parse_propertyline(task_memory, user_memory, task, line_start, line_working_length);
     }
 
     // advance to the next line
@@ -585,8 +580,8 @@ void editor_parse_text(char* text_start, size_t text_length){
   // open bracket increases to the next level
   // text at the next level causes a lookup for a struct member. colon separator
 
-  editor_tasks_cleanup();
-  editor_users_cleanup();
+  editor_tasks_cleanup(task_memory);
+  editor_users_cleanup(user_memory);
 
   printf("[STATUS] Finished parsing text this round\n");
 
@@ -640,7 +635,7 @@ void sdl_cleanup(SDL_Window* win, SDL_Renderer* render){
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 
-void draw_box(SDL_Renderer* render, int x, int y, int flags, Task_Node* task){
+void draw_box(SDL_Renderer* render, int x, int y, int flags, Task* task){
 
   int border = 2;
 
@@ -861,7 +856,7 @@ void editor_cursor_move(TextBuffer* tb, TextCursor* tc, int movedir){
 
 }
 
-void editor_load_text(TextBuffer* text_buffer, const char* filename){
+void editor_load_text(Task_Memory* task_memory, User_Memory* user_memory, TextBuffer* text_buffer, const char* filename){
 
   FILE* fd = fopen(filename, "r");
   assert(fd != NULL);
@@ -878,7 +873,7 @@ void editor_load_text(TextBuffer* text_buffer, const char* filename){
   printf("text is '%.*s'\n", text_buffer->length, text_buffer->text);
 
   // do a test parse of the text description
-  editor_parse_text(text_buffer->text, text_buffer->length);
+  editor_parse_text(task_memory, user_memory, text_buffer->text, text_buffer->length);
   editor_find_line_lengths(text_buffer);
 }
 
@@ -896,13 +891,17 @@ int main(){
   int running = 1;
   int viewport_active = VIEWPORT_EDITOR;
 
-  tasks_init();
+  Task_Memory  task_memory_object;
+  Task_Memory* task_memory = &task_memory_object;
+  User_Memory  user_memory_object;
+  User_Memory* user_memory = &user_memory_object;
+  tasks_init(task_memory, user_memory);
 
   TextBuffer* text_buffer = editor_buffer_init();
   // if not loading a text buffer.. make it a space and length one
   //text_buffer->text[0] = ' ';
   //text_buffer->length = 1;
-  editor_load_text(text_buffer, "examples/demo1.json"); // TODO temporary.. later use filename
+  editor_load_text(task_memory, user_memory, text_buffer, "examples/demo1.json"); // TODO temporary.. later use filename
 
 
   // TODO smooth scroll system
@@ -1072,7 +1071,7 @@ int main(){
 
     if (parse_text == 1){
       // extract property changes from the text
-      editor_parse_text(text_buffer->text, text_buffer->length);
+      editor_parse_text(task_memory, user_memory, text_buffer->text, text_buffer->length);
 
       // PERFORM SCHEDULING! TODO can get fancy....
 
@@ -1216,14 +1215,15 @@ int main(){
     SDL_RenderFillRect(render, &viewport_display_local);
 
 
-    if ((user_allocation_used > 0) && (task_allocation_used > 0)){
+    if ((user_memory->allocation_used > 0) && (task_memory->allocation_used > 0)){
+      User* users = user_memory->users;
       //// DRAW USER NAMES
       // TODO what is the right way to later connect user name to a column location (eventually, in pixels)
 
-      int user_column_increment = viewport_display.w / (user_allocation_used);
+      int user_column_increment = viewport_display.w / (user_memory->allocation_used);
       int user_column_loc = user_column_increment / 2;
       size_t user_column_count = 0;
-      for (size_t i=0; i<user_allocation_total; ++i){
+      for (size_t i=0; i<user_memory->allocation_total; ++i){
         if (users[i].trash == FALSE){
           //printf("draw column for user %s\n", users[i].name);
           users[i].column_index = user_column_count;
@@ -1242,8 +1242,8 @@ int main(){
       }
 
       // TODO a temporary way to see task distribution amongst users. not scheduled... :( 
-      int column_usage[user_allocation_used];
-      for(size_t i=0; i<user_allocation_used; ++i){
+      int column_usage[user_memory->allocation_used];
+      for(size_t i=0; i<user_memory->allocation_used; ++i){
         column_usage[i] = 0;
       }
 
@@ -1253,16 +1253,16 @@ int main(){
       int locx = 10;
       int locy = 50;
 
-      for (size_t n=0; n<task_allocation_total; ++n){
-        if (tasks[n].trash == FALSE){
-          Task_Node* task = tasks + n;
+      for (size_t n=0; n<task_memory->allocation_total; ++n){
+        if (task_memory->tasks[n].trash == FALSE){
+          Task* task = task_memory->tasks + n;
 
           for (size_t u=0; u<task->user_qty; ++u){
             User* user = task->users[u];
             locx = user->column_center_px;
             locy = column_usage[user->column_index]*50 + 50;
             
-            draw_box(render, locx, locy, 0, tasks+n);
+            draw_box(render, locx, locy, 0, task_memory->tasks+n);
 
             column_usage[user->column_index] += 1;
           }
@@ -1306,7 +1306,7 @@ int main(){
 
   cleanup:
   sdl_cleanup(win, render);
-  tasks_free();
+  tasks_free(task_memory, user_memory);
   editor_bufffer_destroy(text_buffer);
 
  return 0;
