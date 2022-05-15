@@ -96,3 +96,11 @@ so anticipate create/delete  ops on nodes once per character entry even; definit
 
 so then for each instant node creation need to go back into display mode to see the effect on schedule? NO, WANT INSTANT FEEDBACK!
 auto create closing brackets so instant parsing doesn't get as screwed up?
+
+
+## Memory Management
+- Maintain a parallel array which is a pointer to open slots in the main array.
+- Pull off the end of the pointer list, decrement its size when you need to allocate something. 
+- Trashing function would be responsible for adding pointer onto the allocateable pointer list
+- always store the location of the end of the list. so no need to parse it to add or remove entries from the end of that list
+- Doesn't need to be a full list? Just store the end? 
