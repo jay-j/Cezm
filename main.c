@@ -185,6 +185,27 @@ void task_user_remove(Task* task, User* user){
   }
 }
 
+// TODO how to make this run less / more efficiently?
+void task_dependents_find_all(Task_Memory* task_memory){
+  Task* tasks = task_memory->tasks;
+
+  // clear previous info
+  for (size_t t=0; t<task_memory->allocation_total; ++t){
+    tasks[t].dependent_qty = 0;
+  }
+
+  // search and add
+  for( size_t t=0; t<task_memory->allocation_total; ++t){
+    if (tasks[t].trash == FALSE){
+      for (size_t i=0; i<tasks[t].prereq_qty; ++i){
+        Task* prereq = tasks[t].prereqs[i];
+        prereq->dependents[prereq->dependent_qty] = tasks+t;
+        prereq->dependent_qty += 1;
+      }
+    }
+  }
+}
+        
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -457,11 +478,11 @@ void editor_parse_propertyline(Task_Memory* task_memory, User_Memory* user_memor
     }
   }
 
-  else if(memcmp(property_str, "dependent_on", 12) == 0){
-    printf("parsing dependencies\n");
+  else if(memcmp(property_str, "prereq", 6) == 0){
+    printf("parsing prerequisites\n");
     char* property_split_start = value_str;
     char* property_split_end = value_str;
-
+ 
     while (property_split_start < line_end){
       property_split_end = memchr(property_split_start, (int) ',', line_end - property_split_start);
       if (property_split_end == NULL){
@@ -472,10 +493,10 @@ void editor_parse_propertyline(Task_Memory* task_memory, User_Memory* user_memor
       int value_length;
       char* value = string_strip(&value_length, property_split_start, property_split_end - property_split_start);
       if (value_length > 0){
-        Task* dep = task_get(task_memory, value, value_length);
-        if (dep != NULL){
-          task->dependents[task->dependent_qty] = dep;
-          task->dependent_qty += 1;
+        Task* prereq = task_get(task_memory, value, value_length);
+        if (prereq != NULL){
+          task->prereqs[task->prereq_qty] = prereq;
+          task->prereq_qty += 1;
         }
         else{
           // TODO something when dependencies don't exist
@@ -532,13 +553,20 @@ void editor_parse_text(Task_Memory* task_memory, User_Memory* user_memory, char*
   }
   for (size_t i=0; i<task_memory->allocation_total; ++i){
     if (tasks[i].mode_edit == TRUE){
-      tasks[i].dependent_qty = 0;
+      tasks[i].prereq_qty = 0;
       tasks[i].user_qty = 0;
     }
   }
 
   // PASS 1 - just add/remove tasks 
   editor_parse_task_detect(task_memory, text_start, text_length);
+
+  // reset some properties for all tasks in the editor
+  for (size_t t=0; t<task_memory->allocation_total; ++t){
+    // if (task_memory->tasks[t].mode_edit == TRUE){ // TODO activate this
+    task_memory->tasks[t].schedule_constraints = 0;
+  }
+
 
   // PASS 2 - all task properties, now you can scrub dependencies TODO
   // read one line at a time
@@ -566,7 +594,7 @@ void editor_parse_text(Task_Memory* task_memory, User_Memory* user_memory, char*
     }
 
     else if (memchr(line_start, (int) '}', line_working_length) != NULL){
-      printf("line '%.*s' ends a task\n", line_working_length, line_start);
+      // printf("line '%.*s' ends a task\n", line_working_length, line_start);
     }
 
     else if(memchr(line_start, (int) ':', line_working_length) != NULL){
@@ -582,6 +610,8 @@ void editor_parse_text(Task_Memory* task_memory, User_Memory* user_memory, char*
 
   editor_tasks_cleanup(task_memory);
   editor_users_cleanup(user_memory);
+
+  task_dependents_find_all(task_memory);
 
   printf("[STATUS] Finished parsing text this round\n");
 
@@ -897,12 +927,15 @@ int main(){
   User_Memory* user_memory = &user_memory_object;
   tasks_init(task_memory, user_memory);
 
+  Schedule_Event_List* schedule_best = schedule_create();
+  Schedule_Event_List* schedule_working = schedule_create();
+
   TextBuffer* text_buffer = editor_buffer_init();
   // if not loading a text buffer.. make it a space and length one
   //text_buffer->text[0] = ' ';
   //text_buffer->length = 1;
   editor_load_text(task_memory, user_memory, text_buffer, "examples/demo1.json"); // TODO temporary.. later use filename
-
+  int trash = schedule_solve(task_memory, schedule_best, schedule_working);
 
   // TODO smooth scroll system
   // TODO error flagging / colors system; live syntax parsing
@@ -1074,7 +1107,10 @@ int main(){
       editor_parse_text(task_memory, user_memory, text_buffer->text, text_buffer->length);
 
       // PERFORM SCHEDULING! TODO can get fancy....
-
+      int schedule_result = schedule_solve(task_memory, schedule_best, schedule_working);
+      if (schedule_result == SUCCESS){
+        // request re draw of stuff
+      }
 
     }
 
@@ -1308,6 +1344,8 @@ int main(){
   sdl_cleanup(win, render);
   tasks_free(task_memory, user_memory);
   editor_bufffer_destroy(text_buffer);
+  schedule_free(schedule_best); 
+  schedule_free(schedule_working);
 
  return 0;
 }

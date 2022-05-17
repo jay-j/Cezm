@@ -3,6 +3,8 @@
 
 #define FALSE 0
 #define TRUE 1
+#define SUCCESS 2
+#define FAILURE 3
 
 // A generic container for storing user or task data
 // data is a reserved memory block, the hash table turns the human-readable string into an index of data[]
@@ -21,8 +23,8 @@
 #define TASK_MODE_DISPLAY_SELECTED (1<<3)
 #define TASK_MODE_DISPLAY_CURSOR (1<<4)
 
-#define SCHEDULE_CONSTRAINT_START (1)
-#define SCHEDULE_CONSTRAINT_DURATION (1<<1)
+#define SCHEDULE_CONSTRAINT_DURATION (1)
+#define SCHEDULE_CONSTRAINT_START (1<<1)
 #define SCHEDULE_CONSTRAINT_END (1<<2)
 #define SCHEDULE_CONSTRAINT_NOSOONER (1<<3)
 
@@ -65,8 +67,8 @@ struct Task{
   User* users[TASK_USERS_MAX];
   size_t user_qty;
 
-  Task* dependents[TASK_DEPENDENCIES_MAX];
-  size_t dependent_qty;
+  Task* prereqs[TASK_DEPENDENCIES_MAX];
+  size_t prereq_qty;
 
   uint64_t schedule_constraints;
   uint64_t day_start;
@@ -77,12 +79,12 @@ struct Task{
   uint16_t subsystem_id;
 
   // DERIVED VARIABLES BELOW THIS LINE
-  Task* prerequisites[TASK_DEPENDENCIES_MAX];
-  size_t prerequisite_qty;
+  Task* dependents[TASK_DEPENDENCIES_MAX];
+  size_t dependent_qty;
   
   // WORKING PROPERTIES
   // selected by cursor?
-
+  uint8_t schedule_done;
 };
 
 typedef struct Task_Memory{
@@ -207,8 +209,11 @@ typedef struct Schedule_Event {
 typedef struct Schedule_Event_List {
   size_t qty;
   size_t qty_max;
+  uint64_t day_start;
+  uint64_t day_end;
+  uint64_t day_duration;
   uint8_t solved;
-  struct Schedule_Event* events;
+  Schedule_Event* events;
 } Schedule_Event_List;
 
 
@@ -235,27 +240,296 @@ void schedule_free(Schedule_Event_List* schedule){
 }
 
 
-int schedule_solve(Task_Memory* task_memory, User_Memory* user_memory, Schedule_Event_List* schedule_best, Schedule_Event_List* schedule_working){
+// copy the schedule from src to dst. namely for use in saving the current best schedule
+void schedule_copy(Schedule_Event_List* dst, Schedule_Event_List* src){
+  Schedule_Event* events_tmp = dst->events;
+  memcpy(dst, src, sizeof (Schedule_Event_List));
+  dst->events = events_tmp;
+  memcpy(dst->events, src->events, sizeof( Schedule_Event) * dst->qty_max);
+}
+
+
+void schedule_calculate_duration(Schedule_Event_List* schedule, Task_Memory* task_memory){
+  uint64_t day_earliest = SIZE_MAX;
+  uint64_t day_latest = 0;
+
+  for (size_t t=0; t<task_memory->allocation_total; ++t){
+    Task* task = task_memory->tasks + t;
+    if (task->trash == FALSE){
+      if (task->day_start < day_earliest){
+        day_earliest = task->day_start;
+      }
+      if (task->day_end > day_latest){
+        day_latest = task->day_end;
+      }
+    }
+  }
+  schedule->day_start = day_earliest;
+  schedule->day_end = day_latest;
+  schedule->day_duration = day_latest - day_earliest;
+}
+
+
+// TODO return the number of conflicting days? e.g. the number of days you need to move the task for it to be OK to schedule
+int schedule_conflict_detect(Task* proposed_task){
+  int conflict_detected = FALSE;
+
+  // look at the users of the task being scheduled
+  for (size_t u=0; u<proposed_task->user_qty; ++u){
+    User* user = proposed_task->users[u];
+
+    // search through every (other) task assigned to those users
+    for (size_t t=0; t<user->task_qty; ++t){
+      Task* scheduled_task = user->tasks[t];
+
+      if (scheduled_task->schedule_done == TRUE){
+        // detect if there is any conflict between the proposed task and previously scheduled tasks
+        if (proposed_task->day_start > scheduled_task->day_start){
+          if (proposed_task->day_start <= scheduled_task->day_end){
+            conflict_detected = TRUE;
+          }
+        }
+        else if (proposed_task->day_start < scheduled_task->day_start){
+          if (proposed_task->day_end >= scheduled_task->day_start){
+            conflict_detected = TRUE;
+          }
+        }
+        else{
+          conflict_detected = TRUE;
+        }
+      }
+    }
+  }
+   
+  return conflict_detected;
+}
+
+
+int schedule_task_push(Schedule_Event_List* schedule_working, Task* task, int schedule_shift_dir){
+  // figure out when this task is getting scheduled
+  // depends on whether it is added by dependency or prerequisite. EXCEPT for user busyness!!
+  // if added by prerequisite.. search forwards. from prerequisite day end to the earliest point when all users are available
+  // if added by dependency... search backwards. 
+  // need to make sure the entire block of user time is available
+  // push the task farther in the scheduling direction until conflict is resolved? one day at a time
+  //
+  // only add a task to ready once all of its prereqs or dependents are scheduled. add to ready with a suggested date
+  // use task->schedule_seek_direction to know which way to try and adjust a task to make it work. 
+  // still need to detect if the new task placement becomes impossible  TODO
+
+  // try and find a time to put this task
+  // guess a time based on earliest/latest possible from the prereq/dependent list
+  uint64_t start;
+  if (schedule_shift_dir == 1){ // prerequisites have been met (schedule after)
+    start = 0;
+    // first start date is [latest prereq end date] + 1
+    for (size_t t=0; t<task->prereq_qty; ++t){
+      if (start < task->prereqs[t]->day_end + 1){
+        start = task->prereqs[t]->day_end + 1;
+      }
+    }
+  }
+  else if (schedule_shift_dir == -1){ // schedule before
+    start = SIZE_MAX - task->day_duration - 2;
+    // latest possible end date is [earliest dependent] - 1
+    for (size_t t=0; t<task->dependent_qty; ++t){
+      if (start + task->day_duration - 1 >= task->dependents[t]->day_start){ // TODO was task->day_duration + 1
+        start = task->dependents[t]->day_start - task->day_duration;
+      }
+    }
+  }
+  else{
+    printf("schedule error, invalid shift direction\n");
+    assert(0);
+  }
+  printf("[SCHEDULER] initial guess puts task %s at day %lu - %lu\n", task->task_name, start, start+task->day_duration);
+
+  // while scheduling conflict exists shift task in direction indicated by schedule_shift_dir
+  task->day_start = start;
+  task->day_end = task->day_start + task->day_duration - 1;
+
+  size_t loop_counter = 0;
+  while (schedule_conflict_detect(task) == TRUE){
+    printf("  conflict adjustment...\n");
+    task->day_start += schedule_shift_dir;
+    task->day_end = task->day_start + task->day_duration - 1;
+
+    // TODO handle detect infinite loop problems??
+    assert(loop_counter < 1e4);
+   // return FAILURE;
+  }
+
+  // store the task solution so it can be recreated later out of the best task
+  schedule_working->qty += 1;
+  schedule_memory_management(schedule_working);
+  schedule_working->events[schedule_working->qty-1].task = task;
+  schedule_working->events[schedule_working->qty-1].date = task->day_start;
+  task->schedule_done = TRUE;
+
+  // mark relations as schedule_ready += 1
+  return SUCCESS;
+}
+
+
+// remove the last value from the list of scheduled tasks
+int schedule_task_pop(Schedule_Event_List* schedule_working){
+  assert(schedule_working->qty > 0);
+  schedule_working->qty -= 1;
+  Task* task = schedule_working->events[schedule_working->qty].task;
+  task->schedule_done = FALSE;
+  return SUCCESS;
+}
+
+
+// no island tasks allowed.. every task must either have fixed_i or a prereq
+// how do you know when you are done? when all non trash tasks are scheduled
+// how do you know when to give up? TODO
+void schedule_solve_iter(Task_Memory* task_memory, Schedule_Event_List* schedule_best, Schedule_Event_List* schedule_working){
+  // quit when all tasks have been scheduled
+  if (task_memory->allocation_used - schedule_working->qty == 0){
+    printf("[SCHEDULER] ALL TASKS SCHEDULED - SUCCESS!\n");
+    
+    // TODO check for and save best schedule. solved schedule overrides no schedule. otherwise use max start and end
+    schedule_working->solved = TRUE; 
+    schedule_calculate_duration(schedule_working, task_memory);
+
+    if (schedule_best->solved == FALSE){
+      printf("[SCHEDULER] FIRST SOLVE\n");
+      // TODO override it
+      schedule_copy(schedule_best, schedule_working);
+    }
+    else if (schedule_working->day_duration < schedule_best->day_duration){
+      // TODO also override it
+      printf("[SCHEDULER] A BETTER SOLVE THAN BEFORE :)\n");
+      schedule_copy(schedule_best, schedule_working);
+    }
+    else{
+      // not a winner
+      printf("[SCHEDULER] A WORSE SOLVE THAN BEFORE :(\n");
+    }
+
+    return; 
+  }
+
+  Task* task;
+  for (size_t t=0; t<task_memory->allocation_total; ++t){
+    task = task_memory->tasks+t;
+
+    if ((task->trash == FALSE) & (task->schedule_done == FALSE)){
+      printf("[SCHEDULER] considering task '%s'..\n", task->task_name);
+      int schedule_shift_dir = 0;
+
+      // detect if all dependents are scheduled
+      if (task->dependent_qty > 0){
+        size_t dependents_scheduled = 0;
+        for (size_t i=0; i<task->dependent_qty; ++i){
+          if (task->dependents[i]->schedule_done == TRUE){
+            ++dependents_scheduled;
+          }
+        }
+        if (dependents_scheduled == task->dependent_qty){
+          printf("       all dependents for %s are scheduled.\n", task->task_name);
+          schedule_shift_dir = -1;
+        }
+      }
+      // detect if all prereqs are scheduled
+      if (task->prereq_qty > 0){
+        size_t prereqs_scheduled = 0;
+        for (size_t i=0; i<task->prereq_qty; ++i){
+          if (task->prereqs[i]->schedule_done == TRUE){
+            ++prereqs_scheduled;
+          }
+        }
+        if (prereqs_scheduled == task->prereq_qty){
+          printf("       all prereqs for %s are scheduled.\n", task->task_name);
+          schedule_shift_dir = 1;
+        }
+      }
+
+
+      // if either.. then try scheduling this task
+      if (schedule_shift_dir != 0){
+        printf("       adding to the schedule\n");
+        int pushed = schedule_task_push(schedule_working, task_memory->tasks+t, schedule_shift_dir);
+        if (pushed == FAILURE){ // is this the right option? will there be an infinite loop?
+          assert(0);
+          continue;
+        }
+
+        // recursion
+        schedule_solve_iter(task_memory, schedule_best, schedule_working);
+
+        printf("   back up a level\n");
+
+        // if you come out of that.. then that path was no good or looking for an alternate solution
+        schedule_task_pop(schedule_working);
+      }
+    }
+  }
+
+
+  // TODO island detection....
+
+}
+
+
+// scheduling algorithm built around having at least one fixed start/end task per task island
+int schedule_solve(Task_Memory* task_memory, Schedule_Event_List* schedule_best, Schedule_Event_List* schedule_working){
   Task* tasks = task_memory->tasks;
   // reset previous search efforts
   schedule_best->qty = 0;
   schedule_working->qty = 0;
 
+  // clear out previous scheduling results
   for (size_t t=0; t<task_memory->allocation_total; ++t){
-    if (tasks[t].dependent_qty == 0){
-      // TODO put it on the open list!
+    tasks[t].schedule_done = FALSE;
+  }
+
+  // pre-process some constraints
+  for (size_t t=0; t<task_memory->allocation_total; ++t){
+    if ((tasks[t].schedule_constraints & (SCHEDULE_CONSTRAINT_END | SCHEDULE_CONSTRAINT_START)) > 0){
+      // schedule this fixed constraint task
+      printf("[SCHEDULER] task %s is a locked schedule task of type %lu\n", tasks[t].task_name, tasks[t].schedule_constraints);
+      tasks[t].schedule_done = TRUE;
+      schedule_working->events[schedule_working->qty].task = tasks + t;
+
+      if ((tasks[t].schedule_constraints & SCHEDULE_CONSTRAINT_END) > 0){
+        tasks[t].day_start = tasks[t].day_end - tasks[t].day_duration + 1;
+      }
+      else if ((tasks[t].schedule_constraints & SCHEDULE_CONSTRAINT_START) > 0){
+        tasks[t].day_end = tasks[t].day_start + tasks[t].day_duration - 1;
+      }
+      schedule_working->events[schedule_working->qty].date = tasks[t].day_start;
+      printf("  schedule for %lu to %lu\n", tasks[t].day_start, tasks[t].day_end);
+
+      schedule_working->qty += 1;
     }
   }
-  // find tasks with no dependencies and fixed_start constraints to initiate the search
-  // for each of these....
 
-  // list active tasks?
-  // store user free/busy state? 
-  // calculate actual start and end dates for the task. don't overwrite given constraints
-  
-  // advance day by one, try to see if there are any tasks which can now be started
-  // maintain an 'active' list of tasks that can be attempted. 
+  printf("schedule working after fixed items: \n");
+  for(size_t e=0; e<schedule_working->qty; ++e){
+    printf("Date: %lu\tTask: %s\n", schedule_working->events[e].date, schedule_working->events[e].task->task_name);
+  }
+  printf("[SCHEDULER] after constraints, have %lu tasks to schedule\n", task_memory->allocation_used - schedule_working->qty);
 
+  // grow in all direction from fixed_start and fixed_end tasks? need to have dependent AND prereq data
+  schedule_solve_iter(task_memory, schedule_best, schedule_working);
 
-  return 0;
+  // TODO fail if impossible to satisfy prerequisite chain; if start date is earlier than a scheduled end date for task X
+
+  printf("final best schedule: \n");
+  for(size_t e=0; e<schedule_best->qty; ++e){
+    schedule_best->events[e].task->day_start = schedule_best->events[e].date;
+  }
+
+  for (uint64_t day=schedule_best->day_start; day<schedule_best->day_end; ++day){
+    printf("Day: %lu\n", day);
+    for(size_t t=0; t<task_memory->allocation_total; ++t){
+      if (task_memory->tasks[t].day_start == day){
+        printf("  %s (%lu - %lu)\n", task_memory->tasks[t].task_name, task_memory->tasks[t].day_start, task_memory->tasks[t].day_end);
+      }
+    }
+  }
+
+  return SUCCESS;
 }

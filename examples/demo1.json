@@ -1,26 +1,55 @@
-actuator_build {
+actuator_build3 {
   user: Jay
-  dependent_on: actuator_design, actuator_review
+  prereq: actuator_design1, actuator_review2
   color: 4
 
   duration: 10
 }
-actuator_checkout {
+actuator_checkout5 {
   user: Jay, Ara
-  dependent_on: actuator_build
+  prereq: actuator_build3, actuator_harness4
   duration: 5
   color: 8
 }
 
-actuator_design {
+actuator_design1 {
   user: Ara
   duration: 10
-  fixed_start: 2022-03-14
+  fixed_start: 2022-03-08
   color: 2
 }
-actuator_review {
+actuator_review2 {
   user: Jay
-  dependent_on: actuator_design
-  duration: 1
+  prereq: actuator_design1
+  duration: 2
   color: 3
+}
+
+actuator_qual6 {
+  user: Jay, Ara
+  prereq: actuator_checkout5
+  duration: 5
+  color: 9
+  fixed_end: 2022-05-01
+}
+
+actuator_harness4 {
+  user: Ara
+  prereq: actuator_review2, actuator_build3
+  duration: 10
+  color: 6
+}
+
+actuator_documentation{
+  user: Jay
+  duration: 10
+  prereq: actuator_build3, code1
+  color: 9
+}
+
+code1{
+  user: Sisir
+  duration: 15
+  prereq: actuator_review2
+  color: 4
 }

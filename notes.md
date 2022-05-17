@@ -37,9 +37,10 @@ A scheduling/planning application where the primary output is a 2D map; time x p
 - Derived fields displayed in node focus are editable and change the source.
 - Task groups / summary / rollup tasks; nested tasks. How does this work with partial edit mode? Also display the minimum/common parent information.
 - Auto indenting/formatting of the file.
-- Margin system
+- Margin system. And/or schedule uncertainty system.
 - Diff system - or just rely on git? Or have git UX elements within this system?
 - Tab completion (for users, dependent-on task names..)
+- Different scheduling constraint types? Earliest, latest, fixed start, fixed end....
 
 # The Format
 Use "hjson":  https://hjson.github.io/
@@ -70,16 +71,6 @@ actuator_checkout : {
 ```
 
 # Pieces
-## Nuklear GUI
-- This is not really the whole piece. Need to pick some other platform specific libraries? Try to SDL, since it is portable.
-- https://github.com/vurtun/nuklear/issues/226
-- specifically `sdl_opengl3` looks fine?
-- how do I change to a nicer font? haha
-- might need too many hacks to get good keyboard controls.. just use plain SDL2 instead? 
- 
-## Format Parsing
-- Use the 'JZON' parser? 
-
 # Memory Conops
 Allocate an array of Task_Node.
 keep a counter for how many total are used; if exceeding the limit then grow allocation a lot
