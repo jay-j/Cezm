@@ -6,10 +6,6 @@
 #define SUCCESS 2
 #define FAILURE 3
 
-// A generic container for storing user or task data
-// data is a reserved memory block, the hash table turns the human-readable string into an index of data[]
-// allocation-used vs. allocation_total tracking allows for infrequent reallocs
-
 // maximum possible number of tasks and users hardcoded since I don't have a hashtable-resizing function
 #define HT_TASKS_MAX 8192
 #define HT_USERS_MAX 1024
@@ -97,12 +93,6 @@ typedef struct Task_Memory{
 } Task_Memory;
 
 
-// track the quantity of activities created, to just increment forever. don't worry about re-use and abandoning old numbers
-// how to keep memory use efficient? don't care about (un)mallocing new items since this is infrequent? 
-//   import/export process will have to convert
-
-
-
 SDL_Color status_colors[10];
 void status_color_init(){
   status_colors[0].r = 150;
@@ -182,24 +172,11 @@ enum TEXTCURSOR_MOVE_DIR {
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-// how does scheduling work? 
-// have a graph structure problem
-// with infinite possible islands...
-// 'topological sort' algorithm
-// align all nodes in a line such that all dependencies point to the left
-// danger - circular dependencies
-// can I write as a matrix problem? 
-// UNKNOWNS: when does each task start? (for tasks without fixed end or start)
-//
-// with differing costs.. seems like a path planning type algorithm is needed
-// construct a date network? at each date look at available tasks to start working on and check which of all is best?
-// envision fixed start and fixed end tasks are obstacles in this path
-// how to make this kind of model deal with uncertainty? 
+// TODO how to make this kind of model deal with uncertainty? 
 // depth first.. 
 // search is an array. elements are [[date, task_init], [date, task init], [date, task init] ... ]
 // can start an arbitrary number of tasks on the same day
 // keep track of two paths. one is the current (WIP) path. the other is the best solution path found to date. best being shortest total duration
-//
 
 typedef struct Schedule_Event {
   uint64_t date;
@@ -355,8 +332,32 @@ int schedule_task_push(Schedule_Event_List* schedule_working, Task* task, int sc
     task->day_end = task->day_start + task->day_duration - 1;
 
     // TODO handle detect infinite loop problems??
-    assert(loop_counter < 1e4);
-   // return FAILURE;
+    if (loop_counter > 1e4){
+      printf("[WARNING] scheduling task shift loop counter exceeded\n");
+      return FAILURE;
+    }
+
+    // verify that prereqs and dependencies are still being met
+    if (schedule_shift_dir > 0){
+      // check against scheduled dependents
+      for (size_t t=0; t<task->dependent_qty; ++t){
+        if (task->dependents[t]->schedule_done == TRUE){
+          if (task->day_end >= task->dependents[t]->day_start){
+            return FAILURE;
+          }
+        }
+      }
+    }
+    else{
+      // check against scheduled prerequisites
+      for (size_t t=0; t<task->prereq_qty; ++t){
+        if (task->prereqs[t]->schedule_done == TRUE){
+          if (task->day_start <= task->prereqs[t]->day_end){
+            return FAILURE;
+          }
+        }
+      }
+    }
   }
 
   // store the task solution so it can be recreated later out of the best task
@@ -366,7 +367,6 @@ int schedule_task_push(Schedule_Event_List* schedule_working, Task* task, int sc
   schedule_working->events[schedule_working->qty-1].date = task->day_start;
   task->schedule_done = TRUE;
 
-  // mark relations as schedule_ready += 1
   return SUCCESS;
 }
 
@@ -389,17 +389,15 @@ void schedule_solve_iter(Task_Memory* task_memory, Schedule_Event_List* schedule
   if (task_memory->allocation_used - schedule_working->qty == 0){
     printf("[SCHEDULER] ALL TASKS SCHEDULED - SUCCESS!\n");
     
-    // TODO check for and save best schedule. solved schedule overrides no schedule. otherwise use max start and end
+    // check for and save best schedule 
     schedule_working->solved = TRUE; 
     schedule_calculate_duration(schedule_working, task_memory);
 
     if (schedule_best->solved == FALSE){
       printf("[SCHEDULER] FIRST SOLVE\n");
-      // TODO override it
       schedule_copy(schedule_best, schedule_working);
     }
     else if (schedule_working->day_duration < schedule_best->day_duration){
-      // TODO also override it
       printf("[SCHEDULER] A BETTER SOLVE THAN BEFORE :)\n");
       schedule_copy(schedule_best, schedule_working);
     }
@@ -452,7 +450,6 @@ void schedule_solve_iter(Task_Memory* task_memory, Schedule_Event_List* schedule
         printf("       adding to the schedule\n");
         int pushed = schedule_task_push(schedule_working, task_memory->tasks+t, schedule_shift_dir);
         if (pushed == FAILURE){ // is this the right option? will there be an infinite loop?
-          assert(0);
           continue;
         }
 
@@ -506,10 +503,6 @@ int schedule_solve(Task_Memory* task_memory, Schedule_Event_List* schedule_best,
     }
   }
 
-  printf("schedule working after fixed items: \n");
-  for(size_t e=0; e<schedule_working->qty; ++e){
-    printf("Date: %lu\tTask: %s\n", schedule_working->events[e].date, schedule_working->events[e].task->task_name);
-  }
   printf("[SCHEDULER] after constraints, have %lu tasks to schedule\n", task_memory->allocation_used - schedule_working->qty);
 
   // grow in all direction from fixed_start and fixed_end tasks? need to have dependent AND prereq data
