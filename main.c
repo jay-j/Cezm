@@ -672,7 +672,7 @@ void draw_box(SDL_Renderer* render, int x, int y, int flags, Task* task){
   SDL_Rect rect;
   // width, height
   rect.w = 180;
-  rect.h = 40;
+  rect.h = task->day_duration*10; // TODO was 40
   // upper left corner position
   rect.x = x - rect.w/2; 
   rect.y = y;
@@ -1288,6 +1288,7 @@ int main(){
       // TODO stretch tasks that correspond to multi users. make some kind of faded shadow indicator to dive underneath others?
       int locx = 10;
       int locy = 50;
+      uint64_t day_start = schedule_best->day_start;
 
       for (size_t n=0; n<task_memory->allocation_total; ++n){
         if (task_memory->tasks[n].trash == FALSE){
@@ -1296,7 +1297,8 @@ int main(){
           for (size_t u=0; u<task->user_qty; ++u){
             User* user = task->users[u];
             locx = user->column_center_px;
-            locy = column_usage[user->column_index]*50 + 50;
+            //locy = column_usage[user->column_index]*50 + 50;
+            locy = 10*(task_memory->tasks[n].day_start - day_start) + 50;
             
             draw_box(render, locx, locy, 0, task_memory->tasks+n);
 
