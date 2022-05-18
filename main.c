@@ -1266,14 +1266,15 @@ int main(int argc, char* argv[]){
     SDL_RenderFillRect(render, &viewport_display_local);
 
 
-    if ((user_memory->allocation_used > 0) && (task_memory->allocation_used > 0)){
+    if (task_memory->allocation_used > 0){
       User* users = user_memory->users;
       //// DRAW USER NAMES
       // TODO what is the right way to later connect user name to a column location (eventually, in pixels)
 
-      int user_column_increment = viewport_display.w / (user_memory->allocation_used);
-      int user_column_loc = user_column_increment / 2;
-      size_t user_column_count = 0;
+      int user_column_increment = viewport_display.w / (user_memory->allocation_used + 1);
+      int nouser_column_center_px = user_column_increment/2;
+      int user_column_loc = user_column_increment + user_column_increment / 2;
+      size_t user_column_count = 1;
       for (size_t i=0; i<user_memory->allocation_total; ++i){
         if (users[i].trash == FALSE){
           //printf("draw column for user %s\n", users[i].name);
@@ -1292,14 +1293,9 @@ int main(int argc, char* argv[]){
         }
       }
 
-      // TODO a temporary way to see task distribution amongst users. not scheduled... :( 
-      int column_usage[user_memory->allocation_used];
-      for(size_t i=0; i<user_memory->allocation_used; ++i){
-        column_usage[i] = 0;
-      }
 
       //// DRAW TASK BOXES IN DISPLAY VIEWPORT
-      // TODO time scheduling function; how to make a grid of time and render some sensible view of that (let time drive position of things)
+      // TODO improve time scheduling function; how to make a grid of time and render some sensible view of that (let time drive position of things)
       // TODO stretch tasks that correspond to multi users. make some kind of faded shadow indicator to dive underneath others?
       int locx = 10;
       int locy = 50;
@@ -1312,26 +1308,23 @@ int main(int argc, char* argv[]){
           for (size_t u=0; u<task->user_qty; ++u){
             User* user = task->users[u];
             locx = user->column_center_px;
-            //locy = column_usage[user->column_index]*50 + 50;
-            locy = 10*(task_memory->tasks[n].day_start - day_start) + 50;
+            locy = 10*(task->day_start - day_start) + 50;
             
-            draw_box(render, locx, locy, 0, task_memory->tasks+n);
+            draw_box(render, locx, locy, 0, task);
 
-            column_usage[user->column_index] += 1;
+          }
+          if (task->user_qty == 0){
+            locx = nouser_column_center_px;
+            locy = 10*(task->day_start - day_start) + 50;
+            draw_box(render, locx, locy, 0, task);
           }
 
-          // TODO need to know the expected width to make sure it doesn't go offscreen? or don't care
           // TODO camera coordinate system; make layout somewhat independent of shown pixels
           // TODO an actual layout engine, show properties of the nodes and such
-          //locx = locx + 120;
-          // if (locx > viewport_display.w){
-          //  locx = 10;
-          //  locy += 100;
-          // }
-        }
+       }
       }
     }
-    // TODO graveyard for orphaned tasks (no users, improper dependencies to be plotted, etc.)
+    // TODO graveyard for orphaned tasks (improper dependencies to be plotted, etc.)
         
 
     // TODO write better warning for schedule fail
