@@ -95,52 +95,55 @@ typedef struct Task_Memory{
 
 SDL_Color status_colors[10];
 void status_color_init(){
+  // grey unknown
   status_colors[0].r = 150;
   status_colors[0].g = 150;
   status_colors[0].b = 150;
 
-  status_colors[1].r = 150;
+  // deep red
+  status_colors[1].r = 192;
   status_colors[1].g = 0;
   status_colors[1].b = 0;
 
+  // bright red
   status_colors[2].r = 255;
   status_colors[2].g = 0;
   status_colors[2].b = 0;
 
   // orange
-  status_colors[3].r = 245;
-  status_colors[3].g = 180;
-  status_colors[3].b = 50;
+  status_colors[3].r = 255;
+  status_colors[3].g = 192;
+  status_colors[3].b = 00;
 
   // yelllow
-  status_colors[4].r = 245;
-  status_colors[4].g = 230;
-  status_colors[4].b = 70;
+  status_colors[4].r = 255;
+  status_colors[4].g = 255;
+  status_colors[4].b = 0;
 
   // light green
-  status_colors[5].r = 75;
-  status_colors[5].g = 245;
-  status_colors[5].b = 70;
+  status_colors[5].r = 146;
+  status_colors[5].g = 208;
+  status_colors[5].b = 80;
 
   // dark green
   status_colors[6].r = 0;
-  status_colors[6].g = 100;
-  status_colors[6].b = 5;
+  status_colors[6].g = 176;
+  status_colors[6].b = 80;
 
   // cyan blue
   status_colors[7].r = 0;
-  status_colors[7].g = 230;
-  status_colors[7].b = 255;
+  status_colors[7].g = 176;
+  status_colors[7].b = 240;
 
   // dark blue
   status_colors[8].r = 0;
-  status_colors[8].g = 50;
-  status_colors[8].b = 200;
+  status_colors[8].g = 112;
+  status_colors[8].b = 192;
 
   // purple
-  status_colors[9].r = 50;
-  status_colors[9].g = 0;
-  status_colors[9].b = 140;
+  status_colors[9].r = 112;
+  status_colors[9].g = 48;
+  status_colors[9].b = 160;
 
   for (size_t i=0; i<10; ++i){
     status_colors[i].a = 255;
