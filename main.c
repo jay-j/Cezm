@@ -7,6 +7,7 @@
 #include <assert.h>
 #include <time.h>
 #include <ctype.h> // for isalnum()
+#include <fcntl.h> // for better file create/open control
 
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_image.h>
@@ -888,19 +889,31 @@ void editor_cursor_move(TextBuffer* tb, TextCursor* tc, int movedir){
 
 void editor_load_text(Task_Memory* task_memory, User_Memory* user_memory, TextBuffer* text_buffer, const char* filename){
 
-  FILE* fd = fopen(filename, "r");
-  assert(fd != NULL);
-  char* text_cursor_loading = text_buffer->text;
-  do {
-    *text_cursor_loading = fgetc(fd);
-    ++text_cursor_loading;
-    text_buffer->length += 1;
-  } while(*(text_cursor_loading - 1) != EOF);
-  fclose(fd);
-  text_buffer->length -= 1;
-  //text_buffer->text[text_buffer->length] = '\0';
-  printf("loaded text of length %d\n", text_buffer->length);
-  printf("text is '%.*s'\n", text_buffer->length, text_buffer->text);
+  // open the file, create if not exist, use persmissions of current user
+  FILE* fd = fopen(filename, "r"); 
+  if (fd != NULL){
+    char* text_cursor_loading = text_buffer->text;
+    do {
+      *text_cursor_loading = fgetc(fd);
+      ++text_cursor_loading;
+      text_buffer->length += 1;
+    } while(*(text_cursor_loading - 1) != EOF);
+    fclose(fd);
+    text_buffer->length -= 1;
+    //text_buffer->text[text_buffer->length] = '\0';
+    printf("loaded text of length %d\n", text_buffer->length);
+    printf("text is '%.*s'\n", text_buffer->length, text_buffer->text);
+  }
+  else{
+    printf("[WARNING] FILE '%s' DOES NOT EXIST, CREATING IT\n", filename);
+    fd = fopen(filename, "w");
+    fprintf(fd, " ");
+    fclose(fd);
+
+    // start an empty text buffer
+    text_buffer->text[0] = ' ';
+    text_buffer->length = 1;
+  }
 
   // do a test parse of the text description
   editor_parse_text(task_memory, user_memory, text_buffer->text, text_buffer->length);
@@ -911,7 +924,15 @@ void editor_load_text(Task_Memory* task_memory, User_Memory* user_memory, TextBu
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 
-int main(){
+int main(int argc, char* argv[]){
+  // parse the input filename
+  if (argc != 2){
+    printf("[ERROR] must specify a schedule file\n");
+    printf("USAGE   ./main.bin myschedule.json\n");
+    return -1;
+  }
+  printf("using file %s\n", argv[1]);
+
   // Platform Init Window
   SDL_Window* win;
   SDL_Renderer* render;
@@ -929,13 +950,11 @@ int main(){
 
   Schedule_Event_List* schedule_best = schedule_create();
   Schedule_Event_List* schedule_working = schedule_create();
+  int schedule_solve_status = FAILURE;
 
   TextBuffer* text_buffer = editor_buffer_init();
-  // if not loading a text buffer.. make it a space and length one
-  //text_buffer->text[0] = ' ';
-  //text_buffer->length = 1;
-  editor_load_text(task_memory, user_memory, text_buffer, "examples/demo1.json"); // TODO temporary.. later use filename
-  int trash = schedule_solve(task_memory, schedule_best, schedule_working);
+  editor_load_text(task_memory, user_memory, text_buffer, argv[1]); 
+  schedule_solve_status = schedule_solve(task_memory, schedule_best, schedule_working);
 
   // TODO smooth scroll system
   // TODO error flagging / colors system; live syntax parsing
@@ -1318,6 +1337,19 @@ int main(){
     }
     // TODO graveyard for orphaned tasks (no users, improper dependencies to be plotted, etc.)
         
+
+    // TODO write better warning for schedule fail
+    if (schedule_solve_status == FAILURE){
+      SDL_Rect rect_errors;
+      rect_errors.w = WINDOW_WIDTH;
+      rect_errors.h = 15; 
+      rect_errors.x = 0; 
+      rect_errors.y = WINDOW_HEIGHT - rect_errors.h;
+
+      SDL_SetRenderDrawColor(render, 220, 0, 0, 255);
+      SDL_RenderFillRect(render, &rect_errors);
+    }
+    
 
     //// UPDATE SCREEN
     SDL_RenderPresent(render);

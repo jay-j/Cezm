@@ -319,7 +319,7 @@ int schedule_task_push(Schedule_Event_List* schedule_working, Task* task, int sc
     printf("schedule error, invalid shift direction\n");
     assert(0);
   }
-  printf("[SCHEDULER] initial guess puts task %s at day %lu - %lu\n", task->task_name, start, start+task->day_duration);
+  //printf("[SCHEDULER] initial guess puts task %s at day %lu - %lu\n", task->task_name, start, start+task->day_duration);
 
   // while scheduling conflict exists shift task in direction indicated by schedule_shift_dir
   task->day_start = start;
@@ -327,7 +327,7 @@ int schedule_task_push(Schedule_Event_List* schedule_working, Task* task, int sc
 
   size_t loop_counter = 0;
   while (schedule_conflict_detect(task) == TRUE){
-    printf("  conflict adjustment...\n");
+    //printf("  conflict adjustment...\n");
     task->day_start += schedule_shift_dir;
     task->day_end = task->day_start + task->day_duration - 1;
 
@@ -387,23 +387,23 @@ int schedule_task_pop(Schedule_Event_List* schedule_working){
 void schedule_solve_iter(Task_Memory* task_memory, Schedule_Event_List* schedule_best, Schedule_Event_List* schedule_working){
   // quit when all tasks have been scheduled
   if (task_memory->allocation_used - schedule_working->qty == 0){
-    printf("[SCHEDULER] ALL TASKS SCHEDULED - SUCCESS!\n");
+    //printf("[SCHEDULER] ALL TASKS SCHEDULED - SUCCESS!\n");
     
     // check for and save best schedule 
     schedule_working->solved = TRUE; 
     schedule_calculate_duration(schedule_working, task_memory);
 
     if (schedule_best->solved == FALSE){
-      printf("[SCHEDULER] FIRST SOLVE\n");
+      //printf("[SCHEDULER] FIRST SOLVE\n");
       schedule_copy(schedule_best, schedule_working);
     }
     else if (schedule_working->day_duration < schedule_best->day_duration){
-      printf("[SCHEDULER] A BETTER SOLVE THAN BEFORE :)\n");
+      //printf("[SCHEDULER] A BETTER SOLVE THAN BEFORE :)\n");
       schedule_copy(schedule_best, schedule_working);
     }
     else{
       // not a winner
-      printf("[SCHEDULER] A WORSE SOLVE THAN BEFORE :(\n");
+      //printf("[SCHEDULER] A WORSE SOLVE THAN BEFORE :(\n");
     }
 
     return; 
@@ -414,7 +414,7 @@ void schedule_solve_iter(Task_Memory* task_memory, Schedule_Event_List* schedule
     task = task_memory->tasks+t;
 
     if ((task->trash == FALSE) & (task->schedule_done == FALSE)){
-      printf("[SCHEDULER] considering task '%s'..\n", task->task_name);
+      //printf("[SCHEDULER] considering task '%s'..\n", task->task_name);
       int schedule_shift_dir = 0;
 
       // detect if all dependents are scheduled
@@ -426,7 +426,7 @@ void schedule_solve_iter(Task_Memory* task_memory, Schedule_Event_List* schedule
           }
         }
         if (dependents_scheduled == task->dependent_qty){
-          printf("       all dependents for %s are scheduled.\n", task->task_name);
+          //printf("       all dependents for %s are scheduled.\n", task->task_name);
           schedule_shift_dir = -1;
         }
       }
@@ -439,7 +439,7 @@ void schedule_solve_iter(Task_Memory* task_memory, Schedule_Event_List* schedule
           }
         }
         if (prereqs_scheduled == task->prereq_qty){
-          printf("       all prereqs for %s are scheduled.\n", task->task_name);
+          //printf("       all prereqs for %s are scheduled.\n", task->task_name);
           schedule_shift_dir = 1;
         }
       }
@@ -447,7 +447,7 @@ void schedule_solve_iter(Task_Memory* task_memory, Schedule_Event_List* schedule
 
       // if either.. then try scheduling this task
       if (schedule_shift_dir != 0){
-        printf("       adding to the schedule\n");
+        //printf("       adding to the schedule\n");
         int pushed = schedule_task_push(schedule_working, task_memory->tasks+t, schedule_shift_dir);
         if (pushed == FAILURE){ // is this the right option? will there be an infinite loop?
           continue;
@@ -456,7 +456,7 @@ void schedule_solve_iter(Task_Memory* task_memory, Schedule_Event_List* schedule
         // recursion
         schedule_solve_iter(task_memory, schedule_best, schedule_working);
 
-        printf("   back up a level\n");
+        //printf("   back up a level\n");
 
         // if you come out of that.. then that path was no good or looking for an alternate solution
         schedule_task_pop(schedule_working);
@@ -497,7 +497,7 @@ int schedule_solve(Task_Memory* task_memory, Schedule_Event_List* schedule_best,
         tasks[t].day_end = tasks[t].day_start + tasks[t].day_duration - 1;
       }
       schedule_working->events[schedule_working->qty].date = tasks[t].day_start;
-      printf("  schedule for %lu to %lu\n", tasks[t].day_start, tasks[t].day_end);
+      //printf("  schedule for %lu to %lu\n", tasks[t].day_start, tasks[t].day_end);
 
       schedule_working->qty += 1;
     }
@@ -510,7 +510,7 @@ int schedule_solve(Task_Memory* task_memory, Schedule_Event_List* schedule_best,
 
   // TODO fail if impossible to satisfy prerequisite chain; if start date is earlier than a scheduled end date for task X
 
-  printf("final best schedule: \n");
+  //printf("final best schedule: \n");
   for(size_t e=0; e<schedule_best->qty; ++e){
     schedule_best->events[e].task->day_start = schedule_best->events[e].date;
   }

@@ -6,7 +6,7 @@ LIB = schedule.h utilities-c/hash_lib/hashtable.h
 LIBOBJ = utilities-c/hash_lib/hashtable.o
 
 all: main.bin
-	./main.bin
+	./main.bin examples/demo1.json
 
 %.bin: %.o $(LIBOBJ)
 	gcc $< $(CFLAGS) $(LIBOBJ) $(LIB_BUILTIN) -o $@
