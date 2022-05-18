@@ -17,8 +17,8 @@
 #include "utilities-c/hash_lib/hashtable.h"
 
 // global
-#define WINDOW_WIDTH 1400
-#define WINDOW_HEIGHT 900
+#define WINDOW_WIDTH 1600
+#define WINDOW_HEIGHT 1000
 #define FONTSIZE 16
 
 // modal switching
@@ -434,6 +434,10 @@ void editor_parse_propertyline(Task_Memory* task_memory, User_Memory* user_memor
   char* split = memchr(line_start, (int) ':', line_working_length);
   int property_str_length;
   char* property_str = string_strip(&property_str_length, line_start, split - line_start);
+  if (property_str_length == 0){
+    return;
+  }
+
   int value_str_length;
   char* value_str = string_strip(&value_str_length, split, line_end - split);
 
