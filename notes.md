@@ -41,6 +41,8 @@ A scheduling/planning application where the primary output is a 2D map; time x p
 - Diff system - or just rely on git? Or have git UX elements within this system?
 - Tab completion (for users, dependent-on task names..)
 - Different scheduling constraint types? Earliest, latest, fixed start, fixed end....
+- Priority or risk parameter for the solver to aid in choosing between solutions?
+- Rearrange user columns to reduce dependency graph visual chaos; minimize total length of column changes
 
 # The Format
 Use "hjson":  https://hjson.github.io/
@@ -95,3 +97,27 @@ auto create closing brackets so instant parsing doesn't get as screwed up?
 - Trashing function would be responsible for adding pointer onto the allocateable pointer list
 - always store the location of the end of the list. so no need to parse it to add or remove entries from the end of that list
 - Doesn't need to be a full list? Just store the end? 
+
+
+## Plotting
+- Use Bezier curves to draw depedency graph
+- Just put a dot if tasks are adjacent and for the same user
+- Single 'emitter' location for a given task
+- Multiple 'entry' ports for a given task. will probably need an untangling mechanism if this is used
+- partial transparency where a curve crosses an unrelated task
+  - one time.. generate an alpha channel mask for the whole layer
+- arrange columns to minimize total curve LR length. side effect will group people whose jobs are more related
+- hold in memory a curves texture that is the size of the display viewport
+- only update it if needed. this texture gets the alpha channel. how will this not overwrite everything? put it at the back? no, because want full color task blocks
+- maybe mask is a secondary texture just for the alpha multiply
+- should I artificially space out tasks to help spread out the dependency indicators? 
+  - this could be static (every 5 days put 5 'blank' days)
+  - this could by dynamic (end of every task put blank days. could this create problems for long running tasks with many in parallel alongside? would make time nonlinear vs. graphics
+- color code the curves to match the source color. or black if there is no source color?
+
+### Bezier Curves
+- Use a 'cubic' curve; with four control points. 
+- `B(t) = (1-t)^3 P[0] + 3*(1-t)^2 t P[1] + 3*(1-t) t^2 P[2] + t^3 P[3] ` for `0 <= t <= 1`
+- control points P[0] and P[3] place directly on the task. Control points P[1] and P[2] place a bit offset to control the curve
+- stroking the curve to give it width is going to be a problem
+- 
