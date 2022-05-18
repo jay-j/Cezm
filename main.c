@@ -1126,11 +1126,7 @@ int main(int argc, char* argv[]){
       editor_parse_text(task_memory, user_memory, text_buffer->text, text_buffer->length);
 
       // PERFORM SCHEDULING! TODO can get fancy....
-      int schedule_result = schedule_solve(task_memory, schedule_best, schedule_working);
-      if (schedule_result == SUCCESS){
-        // request re draw of stuff
-      }
-
+      schedule_solve_status = schedule_solve(task_memory, schedule_best, schedule_working);
     }
 
     // DRAW

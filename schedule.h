@@ -476,6 +476,8 @@ int schedule_solve(Task_Memory* task_memory, Schedule_Event_List* schedule_best,
   // reset previous search efforts
   schedule_best->qty = 0;
   schedule_working->qty = 0;
+  schedule_best->solved = FALSE;
+  schedule_working->solved = FALSE;
 
   // clear out previous scheduling results
   for (size_t t=0; t<task_memory->allocation_total; ++t){
@@ -511,18 +513,15 @@ int schedule_solve(Task_Memory* task_memory, Schedule_Event_List* schedule_best,
   // TODO fail if impossible to satisfy prerequisite chain; if start date is earlier than a scheduled end date for task X
 
   //printf("final best schedule: \n");
-  for(size_t e=0; e<schedule_best->qty; ++e){
-    schedule_best->events[e].task->day_start = schedule_best->events[e].date;
-  }
 
-  for (uint64_t day=schedule_best->day_start; day<schedule_best->day_end; ++day){
-    printf("Day: %lu\n", day);
-    for(size_t t=0; t<task_memory->allocation_total; ++t){
-      if (task_memory->tasks[t].day_start == day){
-        printf("  %s (%lu - %lu)\n", task_memory->tasks[t].task_name, task_memory->tasks[t].day_start, task_memory->tasks[t].day_end);
-      }
+  if (schedule_best->solved == TRUE){
+    for(size_t e=0; e<schedule_best->qty; ++e){
+      schedule_best->events[e].task->day_start = schedule_best->events[e].date;
     }
+    return SUCCESS;
+  }
+  else{
+    return FAILURE;
   }
 
-  return SUCCESS;
 }
