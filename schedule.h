@@ -59,6 +59,7 @@ struct Task{
   char* task_name;
   uint8_t trash;
   uint8_t mode_edit;
+  uint8_t mode_display_selected;
 
   User* users[TASK_USERS_MAX];
   size_t user_qty;
