@@ -897,6 +897,7 @@ void editor_load_text(Task_Memory* task_memory, User_Memory* user_memory, TextBu
   FILE* fd = fopen(filename, "r"); 
   if (fd != NULL){
     char* text_cursor_loading = text_buffer->text;
+    text_buffer->length = 0;
     do {
       *text_cursor_loading = fgetc(fd);
       ++text_cursor_loading;
@@ -1009,6 +1010,29 @@ int main(int argc, char* argv[]){
       // TODO modal switching!
       if (evt.type == SDL_KEYDOWN && evt.key.keysym.sym == SDLK_ESCAPE){
         goto cleanup;
+      }
+      if (evt.type == SDL_KEYDOWN && evt.key.keysym.sym == SDLK_s && SDL_GetModState() & KMOD_CTRL){
+        printf("[file op] save requested\n");
+        // regenerate text for all tasks
+        // put into some temporary allocated buffer so not disrupting the current selection or editor buffer
+        // save that text to the save file given by the filename on command line TODO
+      }
+      if (evt.type == SDL_KEYDOWN && evt.key.keysym.sym == SDLK_r && SDL_GetModState() & KMOD_CTRL){
+        printf("[file op] reload requested\n");
+        // mark all tasks as being in editor
+        for (size_t t=0; t<task_memory->allocation_total; ++t){
+          if (task_memory->tasks[t].trash == FALSE){
+            task_memory->tasks[t].mode_edit = TRUE;
+          }
+        }
+        // load file contents into the editor text buffer, this will also parse the file
+        editor_load_text(task_memory, user_memory, text_buffer, argv[1]);
+        parse_text = 1; // because load doesn't try a schedule solve
+        render_text = 1;
+
+        text_cursor->pos = 0;
+        text_cursor->x = 0;
+        text_cursor->y = 0;
       }
       
       if (viewport_active == VIEWPORT_EDITOR){
