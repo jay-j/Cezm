@@ -672,7 +672,7 @@ void sdl_cleanup(SDL_Window* win, SDL_Renderer* render){
 void task_draw_box(SDL_Renderer* render, Task_Display* task_display){
   Task* task = task_display->task;
 
-  int border = 2;
+  int border = 3;
 
   // draw outline if SELECTED
   if (task_display->task->mode_display_selected == TRUE){
@@ -982,7 +982,31 @@ int main(int argc, char* argv[]){
   size_t task_display_qty = 0;
   int display_pixels_per_day = 10; 
   int display_camera_y = 0;
-  
+
+  // viewport for left half - editor
+  SDL_Rect viewport_editor;
+  viewport_editor.x = 0;
+  viewport_editor.y = 0;
+  viewport_editor.w = WINDOW_WIDTH / 4;
+  viewport_editor.h = WINDOW_HEIGHT;
+
+  // viewport for right half - display
+  SDL_Rect viewport_display;
+  viewport_display.x = viewport_editor.w;
+  viewport_display.y = 0;
+  viewport_display.w = WINDOW_WIDTH - viewport_editor.w;
+  viewport_display.h = WINDOW_HEIGHT;
+  SDL_Rect viewport_display_header;
+  viewport_display_header.x = viewport_display.x;
+  viewport_display_header.y = viewport_display.y;
+  viewport_display_header.w = viewport_display.w;
+  viewport_display_header.h = 40;
+  SDL_Rect viewport_display_body;
+  viewport_display_body.x = viewport_display.x;
+  viewport_display_body.y = viewport_display.y + viewport_display_header.h;
+  viewport_display_body.w = viewport_display.w;
+  viewport_display_body.h = viewport_display.h - viewport_display_header.h;
+
   uint32_t timer_last_loop_start_ms = SDL_GetTicks();
   uint32_t timer_target_ms = 10;
   uint32_t timer_last_loop_duration_ms;
@@ -1155,8 +1179,53 @@ int main(int argc, char* argv[]){
         else if (evt.key.keysym.sym == SDLK_i){
           display_camera_y += 3;
         }
-        // TODO navigate around the displayed nodes
+        else if (evt.type == SDL_MOUSEMOTION){
+          // mouse state is within the entire window
+          int mouse_x, mouse_y;
+          SDL_GetMouseState(&mouse_x, &mouse_y);
+          //printf("mouse: %d, %d\n", mouse_x, mouse_y);
+        }
+        else if (evt.type == SDL_MOUSEBUTTONDOWN){
+          // event fires once even the mouse button continues to be held
+          // (there is also SDL_MOUSEBUTTONUP event that could be used for box select stuff)
+          int mouse_x, mouse_y;
+          SDL_GetMouseState(&mouse_x, &mouse_y);
 
+          // mouse relative to the viewport_display_body area
+          mouse_x -= viewport_display_body.x;
+          mouse_y -= viewport_display_body.y;
+          
+          // check if select anything
+          int touched_anything = FALSE;
+          for (size_t i=0; i<task_display_qty; ++i){
+            if ((mouse_x > task_displays[i].local.x) && (mouse_x < task_displays[i].local.x + task_displays[i].local.w)){
+              if ((mouse_y > task_displays[i].local.y) && (mouse_y < task_displays[i].local.y + task_displays[i].local.h)){
+                task_displays[i].task->mode_display_selected = TRUE;
+                touched_anything = TRUE;
+              }
+            }
+          }
+          if (touched_anything == FALSE){
+            for (size_t t=0; t<task_memory->allocation_total; ++t){
+              task_memory->tasks[t].mode_display_selected = FALSE;
+            }
+          }
+        } // end processing mouse click
+        else if (evt.key.keysym.sym == SDLK_w){
+          // TODO select all nested prerequisites of the given task
+          // TODO or just one..  need to make this a controllable thing!
+          for (size_t t=0; t<task_memory->allocation_total; ++t){
+            if (task_memory->tasks[t].trash == FALSE){
+              if (task_memory->tasks[t].mode_display_selected == TRUE){
+                for (size_t i=0; i<task_memory->tasks[t].prereq_qty; ++i){
+                  task_memory->tasks[t].prereqs[i]->mode_display_selected = TRUE;
+                }
+              }
+            }
+          }
+        }
+
+        // TODO navigate around the displayed nodes
          
       } // viewport display
 
@@ -1181,13 +1250,7 @@ int main(int argc, char* argv[]){
     SDL_RenderClear(render);
 
 
-    // viewport for left half - editor
-    SDL_Rect viewport_editor;
-    viewport_editor.x = 0;
-    viewport_editor.y = 0;
-    viewport_editor.w = WINDOW_WIDTH / 4;
-    viewport_editor.h = WINDOW_HEIGHT;
-    SDL_RenderSetViewport(render, &viewport_editor);
+   SDL_RenderSetViewport(render, &viewport_editor);
     if (viewport_active == VIEWPORT_EDITOR){
       SDL_SetRenderDrawColor(render, 0xFF, 0xFF, 0xFF, 0xFF);
     }
@@ -1280,25 +1343,7 @@ int main(int argc, char* argv[]){
     } // endif request re-render text
 
 
-    // viewport for right half - display
-    SDL_Rect viewport_display;
-    viewport_display.x = viewport_editor.w;
-    viewport_display.y = 0;
-    viewport_display.w = WINDOW_WIDTH - viewport_editor.w;
-    viewport_display.h = WINDOW_HEIGHT;
     SDL_RenderSetViewport(render, &viewport_display);
-
-    SDL_Rect viewport_display_header;
-    viewport_display_header.x = viewport_display.x;
-    viewport_display_header.y = viewport_display.y;
-    viewport_display_header.w = viewport_display.w;
-    viewport_display_header.h = 40;
-
-    SDL_Rect viewport_display_body;
-    viewport_display_body.x = viewport_display.x;
-    viewport_display_body.y = viewport_display.y + viewport_display_header.h;
-    viewport_display_body.w = viewport_display.w;
-    viewport_display_body.h = viewport_display.h - viewport_display_header.h;
 
     // background color shows mode select
     SDL_Rect viewport_display_local = {0, 0, viewport_display.w, viewport_display.h};
@@ -1323,7 +1368,7 @@ int main(int argc, char* argv[]){
       int nouser_column_center_px = user_column_increment/2;
       int user_column_loc = user_column_increment + user_column_increment / 2;
       size_t user_column_count = 1;
-      for (size_t i=0; i<user_memory->allocation_total; ++i){
+      for (size_t i=0; i<user_memory->allocation_total; ++i){ // TODO move this to scheduling (not every frame)
         if (users[i].trash == FALSE){
           //printf("draw column for user %s\n", users[i].name);
           users[i].column_index = user_column_count;
@@ -1331,7 +1376,7 @@ int main(int argc, char* argv[]){
           sdlj_textbox_render(render, &name_textbox, users[i].name);
           SDL_Rect src = {0, 0, name_textbox.width, name_textbox.height};
           SDL_Rect dst = {
-            users[i].column_center_px,
+            users[i].column_center_px - name_textbox.width/2,
             5, 
             name_textbox.width, name_textbox.height};
           assert(SDL_RenderCopy(render, name_textbox.texture, &src, &dst) == 0);
@@ -1346,7 +1391,7 @@ int main(int argc, char* argv[]){
         task_memory->tasks[t].dependents_display_qty = 0;
       }
       
-      // build the display lists
+      // build the display lists TODO move to scheduling (not every frame)
       task_display_qty = 0; // reset every loop
       for (size_t t=0; t<task_memory->allocation_total; ++t){
         Task* task = task_memory->tasks + t;
