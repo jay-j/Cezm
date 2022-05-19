@@ -36,15 +36,6 @@ TTF_Font* global_font = NULL;
 #define TASK_DISPLAY_LIMIT 1024
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-typedef struct Task_Display{
-  Task* task;
-  int column; // aka.. which user
-  SDL_Rect global;
-  SDL_Rect local;
-} Task_Display;
-
-
 void tasks_init(Task_Memory* task_memory, User_Memory* user_memory){
   task_memory->allocation_total = 64;
   task_memory->allocation_used = 0;
@@ -1350,8 +1341,13 @@ int main(int argc, char* argv[]){
           user_column_count += 1;
         }
       }
+
+      // TODO is there a more efficient way to do this?? build the structure only on reschedule, only update pixels every frame?
+      for (size_t t=0; t<task_memory->allocation_total; ++t){
+        task_memory->tasks[t].dependents_display_qty = 0;
+      }
       
-      // build the display list
+      // build the display lists
       task_display_qty = 0; // reset every loop
       for (size_t t=0; t<task_memory->allocation_total; ++t){
         Task* task = task_memory->tasks + t;
@@ -1360,12 +1356,22 @@ int main(int argc, char* argv[]){
             for (size_t u=0; u<task->user_qty; ++u){
               task_displays[task_display_qty].task = task;
               task_displays[task_display_qty].column = task->users[u]->column_center_px;
+              for(size_t p=0; p<task->prereq_qty; ++p){ // TODO perform this linking in scheduling
+                Task* prereq = task->prereqs[p];
+                prereq->dependents_display[prereq->dependents_display_qty] = &task_displays[task_display_qty];
+                prereq->dependents_display_qty +=1;
+              }
               ++task_display_qty;
             }
           }
           else{
             task_displays[task_display_qty].task = task;
             task_displays[task_display_qty].column = nouser_column_center_px;
+            for(size_t p=0; p<task->prereq_qty; ++p){ // TODO perfom this linking in scheduling
+              Task* prereq = task->prereqs[p];
+              prereq->dependents_display[prereq->dependents_display_qty] = &task_displays[task_display_qty];
+              prereq->dependents_display_qty +=1;
+            }
             ++task_display_qty;
           }
           assert(task_display_qty < TASK_DISPLAY_LIMIT);
@@ -1392,6 +1398,25 @@ int main(int argc, char* argv[]){
         // now display on screen!
         task_draw_box(render, td);
       }
+
+      // now draw bezier curves!
+      SDL_SetRenderDrawColor(render, 0x00, 0x00, 0x00, 0xFF);
+      for (size_t i=0; i<task_display_qty; ++i){
+        Task_Display* td = task_displays + i;
+        Task* task = td->task;
+
+        // draw a line from this task to each of its plotted dependencies
+        for (size_t j=0; j<task->dependents_display_qty; ++j){
+          Task_Display* td_dep = task->dependents_display[j];
+
+          int start_x = td->local.x + td->local.w/2;
+          int start_y = td->local.y + td->local.h;
+          int end_x = td_dep->local.x + td_dep->local.w/2;
+          int end_y = td_dep->local.y;
+          SDL_RenderDrawLine(render, start_x, start_y, end_x, end_y);
+        }
+      }
+
     } // end if there are any tasks to draw
 
     // TODO graveyard for orphaned tasks (improper dependencies to be plotted, etc.)

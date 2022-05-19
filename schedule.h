@@ -12,7 +12,7 @@
 
 // a single task may be worked by up to 8 users
 #define TASK_USERS_MAX 8
-#define TASK_DEPENDENCIES_MAX 64
+#define TASK_DEPENDENCIES_MAX 16
 
 #define TASK_MODE_EDIT (1<<1)
 #define TASK_MODE_EDIT_CURSOR (1<<2)
@@ -28,6 +28,7 @@
 #define USER_TASKS_MAX 1024
 
 typedef struct Task Task;
+typedef struct Task_Display Task_Display;
 
 typedef struct User{
   char* name;
@@ -60,6 +61,7 @@ struct Task{
   uint8_t trash;
   uint8_t mode_edit;
   uint8_t mode_display_selected;
+  uint8_t schedule_done;
 
   User* users[TASK_USERS_MAX];
   size_t user_qty;
@@ -78,10 +80,9 @@ struct Task{
   // DERIVED VARIABLES BELOW THIS LINE
   Task* dependents[TASK_DEPENDENCIES_MAX];
   size_t dependent_qty;
-  
-  // WORKING PROPERTIES
-  // selected by cursor?
-  uint8_t schedule_done;
+
+  Task_Display* dependents_display[TASK_USERS_MAX * TASK_DEPENDENCIES_MAX];
+  size_t dependents_display_qty;
 };
 
 typedef struct Task_Memory{
@@ -92,6 +93,14 @@ typedef struct Task_Memory{
   size_t last_created;
   uint8_t* editor_visited;
 } Task_Memory;
+
+
+struct Task_Display{
+  Task* task;
+  int column; // aka.. which user
+  SDL_Rect global;
+  SDL_Rect local;
+};
 
 
 SDL_Color status_colors[10];
