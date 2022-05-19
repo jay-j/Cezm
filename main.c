@@ -1399,10 +1399,12 @@ int main(int argc, char* argv[]){
       }
 
       // now draw bezier curves!
-      SDL_SetRenderDrawColor(render, 0x00, 0x00, 0x00, 0xFF);
       for (size_t i=0; i<task_display_qty; ++i){
         Task_Display* td = task_displays + i;
         Task* task = td->task;
+         
+        int sc = task->status_color;
+        SDL_SetRenderDrawColor(render, status_colors[sc].r, status_colors[sc].g, status_colors[sc].b, status_colors[sc].a);
 
         // draw a line from this task to each of its plotted dependencies
         for (size_t j=0; j<task->dependents_display_qty; ++j){
