@@ -964,6 +964,7 @@ int main(int argc, char* argv[]){
   TextBuffer* text_buffer = editor_buffer_init();
   editor_load_text(task_memory, user_memory, text_buffer, argv[1]); 
   schedule_solve_status = schedule_solve(task_memory, schedule_best, schedule_working);
+  uint64_t day_project_start = schedule_best->day_start;
 
   // TODO smooth scroll system
   // TODO error flagging / colors system; live syntax parsing
@@ -1179,6 +1180,7 @@ int main(int argc, char* argv[]){
 
       // PERFORM SCHEDULING! TODO can get fancy....
       schedule_solve_status = schedule_solve(task_memory, schedule_best, schedule_working);
+      day_project_start = schedule_best->day_start;
     }
 
     // DRAW
@@ -1370,7 +1372,6 @@ int main(int argc, char* argv[]){
         }
       }
 
-      uint64_t day_project_start = schedule_best->day_start;
       
       // parse the display list to assign pixel values and display
       SDL_RenderSetViewport(render, &viewport_display_body);
@@ -1391,7 +1392,8 @@ int main(int argc, char* argv[]){
         // now display on screen!
         task_draw_box(render, td);
       }
-    }
+    } // end if there are any tasks to draw
+
     // TODO graveyard for orphaned tasks (improper dependencies to be plotted, etc.)
 
     // TODO write better warning for schedule fail
