@@ -120,4 +120,9 @@ auto create closing brackets so instant parsing doesn't get as screwed up?
 - `B(t) = (1-t)^3 P[0] + 3*(1-t)^2 t P[1] + 3*(1-t) t^2 P[2] + t^3 P[3] ` for `0 <= t <= 1`
 - control points P[0] and P[3] place directly on the task. Control points P[1] and P[2] place a bit offset to control the curve
 - stroking the curve to give it width is going to be a problem
-- 
+
+# Profiling
+Edit makefile so `CFLAGS = -O0 -Wall -Wextra -g -pg`. 
+Compile. Run program, force it to do a bunch of text parsing and rescheduling. 
+The program will create a binary gmon.out file when it exits normally.
+Run `$ gprof main.bin gmon.out > prof_output.txt` to convert that binary file into something human readable. 
