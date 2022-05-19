@@ -929,6 +929,29 @@ void editor_load_text(Task_Memory* task_memory, User_Memory* user_memory, TextBu
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 
+typedef struct Task_Display{
+  Task* task;
+  int column; // aka.. which user
+  SDL_Rect global;
+  SDL_Rect local;
+} Task_Display;
+
+// TODO how do I want to represent the camera/screenspace? 
+
+void display_compute_global_pixels(Task_Display* task_display, size_t task_display_qty){
+  // TODO how wide is each column
+  // TODO import column spacing information
+  // TODO import time scaling information
+  for (size_t i=0; i<task_display_qty; ++i){
+    task_display->global.w = 20; // TODO
+    // TODO the rest of them
+
+  }
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+
 int main(int argc, char* argv[]){
   // parse the input filename
   if (argc != 2){
