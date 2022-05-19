@@ -7,7 +7,6 @@
 #include <assert.h>
 #include <time.h>
 #include <ctype.h> // for isalnum()
-#include <fcntl.h> // for better file create/open control
 
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_image.h>
