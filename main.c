@@ -33,8 +33,17 @@ TTF_Font* global_font = NULL;
 
 // viewport-display related
 #define DISPLAY_TASK_SELECTED (1)
+#define TASK_DISPLAY_LIMIT 1024
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+typedef struct Task_Display{
+  Task* task;
+  int column; // aka.. which user
+  SDL_Rect global;
+  SDL_Rect local;
+} Task_Display;
+
 
 void tasks_init(Task_Memory* task_memory, User_Memory* user_memory){
   task_memory->allocation_total = 64;
@@ -670,36 +679,31 @@ void sdl_cleanup(SDL_Window* win, SDL_Renderer* render){
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 
-void draw_box(SDL_Renderer* render, int x, int y, int flags, Task* task){
+void task_draw_box(SDL_Renderer* render, Task_Display* task_display){
+  Task* task = task_display->task;
 
   int border = 2;
 
-  SDL_Rect rect;
-  // width, height
-  rect.w = 180;
-  rect.h = task->day_duration*10; // TODO was 40
-  // upper left corner position
-  rect.x = x - rect.w/2; 
-  rect.y = y;
-
-  // draw outline if selected
-  if ((flags & DISPLAY_TASK_SELECTED) > 0){
+  // draw outline if SELECTED
+  if (task_display->task->mode_display_selected == TRUE){
     SDL_Rect outline;
-    outline.x = x-border;
-    outline.y = y-border;
-    outline.w = rect.w+2*border;
-    outline.h = rect.h+2*border;
+    outline.x = task_display->local.x-border;
+    outline.y = task_display->local.y-border;
+    outline.w = task_display->local.w + 2*border;
+    outline.h = task_display->local.h + 2*border;
 
     SDL_SetRenderDrawColor(render, 200, 100, 0, 255); // orange
     SDL_RenderFillRect(render, &outline);
   }
+
+  // TODO draw a different border if the task is ACTIVE 
 
   
   // draw the base box
   int sc = task->status_color;
   SDL_SetRenderDrawColor(render, status_colors[sc].r, status_colors[sc].g, status_colors[sc].b, status_colors[sc].a);
   //SDL_SetRenderDrawColor(render, 220, 220, 220, 255); // light grey? 
-  SDL_RenderFillRect(render, &rect);
+  SDL_RenderFillRect(render, &task_display->local);
   
   // draw the text on top
   SDL_Color text_color = {
@@ -720,8 +724,8 @@ void draw_box(SDL_Renderer* render, int x, int y, int flags, Task* task){
   assert(texture != NULL);
 
   SDL_Rect textbox;
-  textbox.x = x + border - rect.w/2;
-  textbox.y = y + border;
+  textbox.x = task_display->local.x + border;
+  textbox.y = task_display->local.y + border;
   TTF_SizeText(global_font, task->task_name, &textbox.w, &textbox.h);
 
   SDL_Rect src = {0, 0, textbox.w, textbox.h};
@@ -929,29 +933,6 @@ void editor_load_text(Task_Memory* task_memory, User_Memory* user_memory, TextBu
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 
-typedef struct Task_Display{
-  Task* task;
-  int column; // aka.. which user
-  SDL_Rect global;
-  SDL_Rect local;
-} Task_Display;
-
-// TODO how do I want to represent the camera/screenspace? 
-
-void display_compute_global_pixels(Task_Display* task_display, size_t task_display_qty){
-  // TODO how wide is each column
-  // TODO import column spacing information
-  // TODO import time scaling information
-  for (size_t i=0; i<task_display_qty; ++i){
-    task_display->global.w = 20; // TODO
-    // TODO the rest of them
-
-  }
-}
-
-///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-
 int main(int argc, char* argv[]){
   // parse the input filename
   if (argc != 2){
@@ -1004,8 +985,12 @@ int main(int argc, char* argv[]){
   SDL_StartTextInput();
 
   // TODO display viewport
-  // layout of nodes
   // navigation among nodes, cursor system, selection system
+  // Display Viewport variables; list of tasks to plot, camera stuff
+  Task_Display* task_displays = (Task_Display*) malloc(TASK_DISPLAY_LIMIT * sizeof(Task_Display));
+  size_t task_display_qty = 0;
+  int display_pixels_per_day = 10; 
+  int display_camera_y = 0;
   
   uint32_t timer_last_loop_start_ms = SDL_GetTicks();
   uint32_t timer_target_ms = 10;
@@ -1163,6 +1148,22 @@ int main(int argc, char* argv[]){
           printf("switch to viewport editor\n");
           SDL_StartTextInput();
         }
+        else if (evt.key.keysym.sym == SDLK_EQUALS){ // time zoom in. the plus key on us keyboards
+          display_pixels_per_day += 1;
+          printf("zoom in\n"); 
+        }
+        else if (evt.key.keysym.sym == SDLK_MINUS){ // time zoom out
+          if (display_pixels_per_day > 1){
+            display_pixels_per_day -= 1;
+            printf("zoom out\n"); 
+          }
+        }
+        else if (evt.key.keysym.sym == SDLK_u){
+          display_camera_y -= 3;
+        }
+        else if (evt.key.keysym.sym == SDLK_i){
+          display_camera_y += 3;
+        }
         // TODO navigate around the displayed nodes
 
          
@@ -1204,7 +1205,6 @@ int main(int argc, char* argv[]){
     SDL_RenderFillRect(render, &viewport_editor);
     
     // text rendering, and figure out where the cursor is
-
     if (1 == 1){ // TODO if (render_text == 1)
       if (text_buffer->length > 0){
         // figure out how many lines there are to render
@@ -1288,16 +1288,6 @@ int main(int argc, char* argv[]){
     } // endif request re-render text
 
 
-    //printf("cursor pos: %d (%d, %d)\n", editor_cursor_pos, editor_cursor_pos_x, editor_cursor_pos_y);
-
-    
-//    gInputTextTexture.render( (viewport_editor.w - gInputTextTexture.getWidth())/2, gPromptTextTexture.getHeight());
-
-    // SDL_RenderFillRect(render, &fill_rect);
-    // SDL_RenderDrawRect(render, &outline);
-    // SDL_RenderDrawLine(render, 0, WINDOW_HEIGHT / 2, WINDOW_WIDTH, WINDOW_HEIGHT / 2);
-    // SDL_RenderDrawPoint(render, WINDOW_WIDTH / 2, i);
-
     // viewport for right half - display
     SDL_Rect viewport_display;
     viewport_display.x = viewport_editor.w;
@@ -1305,6 +1295,18 @@ int main(int argc, char* argv[]){
     viewport_display.w = WINDOW_WIDTH - viewport_editor.w;
     viewport_display.h = WINDOW_HEIGHT;
     SDL_RenderSetViewport(render, &viewport_display);
+
+    SDL_Rect viewport_display_header;
+    viewport_display_header.x = viewport_display.x;
+    viewport_display_header.y = viewport_display.y;
+    viewport_display_header.w = viewport_display.w;
+    viewport_display_header.h = 40;
+
+    SDL_Rect viewport_display_body;
+    viewport_display_body.x = viewport_display.x;
+    viewport_display_body.y = viewport_display.y + viewport_display_header.h;
+    viewport_display_body.w = viewport_display.w;
+    viewport_display_body.h = viewport_display.h - viewport_display_header.h;
 
     // background color shows mode select
     SDL_Rect viewport_display_local = {0, 0, viewport_display.w, viewport_display.h};
@@ -1317,6 +1319,9 @@ int main(int argc, char* argv[]){
     SDL_RenderFillRect(render, &viewport_display_local);
 
 
+    SDL_RenderSetViewport(render, &viewport_display_header);
+    // figure out and assign columns to each user
+    // TODO when should this step be done vs. building the display list?
     if (task_memory->allocation_used > 0){
       User* users = user_memory->users;
       //// DRAW USER NAMES
@@ -1343,42 +1348,54 @@ int main(int argc, char* argv[]){
           user_column_count += 1;
         }
       }
-
-
-      //// DRAW TASK BOXES IN DISPLAY VIEWPORT
-      // TODO improve time scheduling function; how to make a grid of time and render some sensible view of that (let time drive position of things)
-      // TODO stretch tasks that correspond to multi users. make some kind of faded shadow indicator to dive underneath others?
-      int locx = 10;
-      int locy = 50;
-      uint64_t day_start = schedule_best->day_start;
-
-      for (size_t n=0; n<task_memory->allocation_total; ++n){
-        if (task_memory->tasks[n].trash == FALSE){
-          Task* task = task_memory->tasks + n;
-
-          for (size_t u=0; u<task->user_qty; ++u){
-            User* user = task->users[u];
-            locx = user->column_center_px;
-            locy = 10*(task->day_start - day_start) + 50;
-            
-            draw_box(render, locx, locy, 0, task);
-
+      
+      // build the display list
+      task_display_qty = 0; // reset every loop
+      for (size_t t=0; t<task_memory->allocation_total; ++t){
+        Task* task = task_memory->tasks + t;
+        if (task->trash == FALSE){
+          if (task->user_qty > 0){  
+            for (size_t u=0; u<task->user_qty; ++u){
+              task_displays[task_display_qty].task = task;
+              task_displays[task_display_qty].column = task->users[u]->column_center_px;
+              ++task_display_qty;
+            }
           }
-          if (task->user_qty == 0){
-            locx = nouser_column_center_px;
-            locy = 10*(task->day_start - day_start) + 50;
-            draw_box(render, locx, locy, 0, task);
+          else{
+            task_displays[task_display_qty].task = task;
+            task_displays[task_display_qty].column = nouser_column_center_px;
+            ++task_display_qty;
           }
+          assert(task_display_qty < TASK_DISPLAY_LIMIT);
+        }
+      }
 
-          // TODO camera coordinate system; make layout somewhat independent of shown pixels
-          // TODO an actual layout engine, show properties of the nodes and such
-       }
+      uint64_t day_project_start = schedule_best->day_start;
+      
+      // parse the display list to assign pixel values and display
+      SDL_RenderSetViewport(render, &viewport_display_body);
+
+      for (size_t i=0; i<task_display_qty; ++i){
+        Task_Display* td = task_displays + i;
+        td->global.w = 180;
+        td->global.x = td->column - td->global.w / 2;
+        td->global.y = display_pixels_per_day*(td->task->day_start - day_project_start);
+        td->global.h = display_pixels_per_day*(td->task->day_duration); // TODO account for weekends
+
+        // now compute the local stuff given the camera location
+        td->local.x = td->global.x;
+        td->local.w = td->global.w;
+        td->local.y = td->global.y + display_camera_y;
+        td->local.h = td->global.h;
+
+        // now display on screen!
+        task_draw_box(render, td);
       }
     }
     // TODO graveyard for orphaned tasks (improper dependencies to be plotted, etc.)
-        
 
     // TODO write better warning for schedule fail
+    SDL_RenderSetViewport(render, &viewport_display);
     if (schedule_solve_status == FAILURE){
       SDL_Rect rect_errors;
       rect_errors.w = WINDOW_WIDTH;
@@ -1397,19 +1414,6 @@ int main(int argc, char* argv[]){
   } // while forever
 
 
-  // have two panels; left for text, right for display
-
-
-
-  // ux can type in text in the text box
-
-
-
-  // button to push to cause it to parse the jzon
-
-
-
-  // draw some boxes somewhere in the project timeline
 
   // TODO track which timeline element(s) the user currently has selected
   
@@ -1420,6 +1424,7 @@ int main(int argc, char* argv[]){
   editor_bufffer_destroy(text_buffer);
   schedule_free(schedule_best); 
   schedule_free(schedule_working);
+  free(task_displays); 
 
  return 0;
 }
