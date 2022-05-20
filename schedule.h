@@ -32,6 +32,7 @@ typedef struct Task_Display Task_Display;
 
 typedef struct User{
   char* name;
+  size_t name_length;
   uint8_t trash; // if TRUE, OK to recycle this object
   uint8_t mode_edit;
   uint8_t visited; // if TRUE, have seen this user this round
@@ -58,6 +59,7 @@ typedef struct User_Memory{
 
 struct Task{
   char* task_name;
+  size_t task_name_length;
   uint8_t trash;
   uint8_t mode_edit;
   uint8_t mode_display_selected;
