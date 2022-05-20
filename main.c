@@ -111,6 +111,7 @@ Task* task_create(Task_Memory* task_memory, char* task_name, size_t task_name_le
   // zero everything there. also brings mode out of trash mode
   memset((void*) task, 0, sizeof(Task));
   task->trash = FALSE;
+  task->task_name_length = task_name_length;
   
   // add to hash table
   char* name = (char*) malloc(task_name_length+1);
@@ -236,6 +237,7 @@ User* user_create(User_Memory* user_memory, char* user_name, size_t name_length)
   // zero everything there
   memset((void*) user, 0, sizeof(User));
   user->trash = FALSE; 
+  user->name_length = name_length;
 
   char* name = (char*) malloc(name_length+1);
   memcpy(name, user_name, name_length);
@@ -373,7 +375,7 @@ void editor_parse_task_detect(Task_Memory* task_memory, char* text_start, size_t
 
       // mark task as visited
       task_memory->editor_visited[task - task_memory->tasks] = TRUE;
-      task->mode_edit = TRUE; // TODO this is a hack since this should be set by the DISPLAY VIEWPORT
+      // task->mode_edit = TRUE; // TODO TODO this is a hack since this should be set by the DISPLAY VIEWPORT
     }
 
     line_start = line_end + 1;
@@ -621,19 +623,6 @@ void editor_parse_text(Task_Memory* task_memory, User_Memory* user_memory, char*
 
   // TODO add better error handling warning stuff
 }
-
-
-void editor_generate_text(TextBuffer* text_buffer){
-  text_buffer->length = 1; // TODO
-  // flag to do optioanl stuff? 
-  // how to denote cursor? 
-
-  // for each ndoe
-  // if node selected for edit..
-  // go through properties, write stuff
-
-}
-
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -915,10 +904,75 @@ void editor_load_text(Task_Memory* task_memory, User_Memory* user_memory, TextBu
   }
 
   // do a test parse of the text description
+  for (size_t t=0; t<task_memory->allocation_total; ++t){
+    task_memory->tasks[t].mode_edit = TRUE;
+  }
   editor_parse_text(task_memory, user_memory, text_buffer->text, text_buffer->length);
   editor_find_line_lengths(text_buffer);
 }
 
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+// inline this function? TODO
+char* text_push_char(char* text, char new){
+  *text = new;
+  ++text;
+  return text;
+}
+
+void editor_text_from_data(Task_Memory* task_memory, TextBuffer* text_buffer){
+  // TODO reset/clear the old buffer
+  char* cursor = text_buffer->text;
+
+  // Fill the new one
+  for (size_t t=0; t<task_memory->allocation_total; ++t){
+    Task* task = task_memory->tasks + t;
+    if (task->trash == FALSE){
+      if (task->mode_edit == TRUE){
+        // task name
+        memcpy(cursor, task->task_name, task->task_name_length);
+        cursor += task->task_name_length;
+
+        *cursor++ = '{';
+        *cursor++ = '\n';
+
+        // duration
+
+        // dependency
+        /*
+        if (task->prereq_qty > 0){
+          memcpy(cursor, "  prereq: ", 10);
+          cursor += 10;
+
+          for (size_t i=0; i<task-> 
+        */
+        
+        // user
+        if (task->user_qty > 0){
+          memcpy(cursor, "  user: ", 8);
+          cursor += 8;
+
+          for (size_t u=0; u<task->user_qty; ++u){
+            memcpy(cursor, task->users[u]->name, task->users[u]->name_length);
+            cursor += task->users[u]->name_length;
+          }
+          cursor = text_push_char(cursor, '\n');
+        }
+
+        // fixed dates
+        *cursor++ = '}';
+        *cursor++ = '\n';
+      }
+    }
+  }
+  text_buffer->length = cursor - text_buffer->text;
+
+  if (text_buffer->length == 0){
+    text_buffer->text[0] = ' ';
+    text_buffer->length = 1;
+  }
+
+}
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -1160,6 +1214,7 @@ int main(int argc, char* argv[]){
       else if (viewport_active == VIEWPORT_DISPLAY){
         if (evt.key.keysym.sym == SDLK_e && evt.type == SDL_KEYDOWN){
           viewport_active = VIEWPORT_EDITOR;
+          editor_text_from_data(task_memory, text_buffer); // TODO have to manage this transition so much better
           printf("switch to viewport editor\n");
           SDL_StartTextInput();
         }
@@ -1201,6 +1256,7 @@ int main(int argc, char* argv[]){
             if ((mouse_x > task_displays[i].local.x) && (mouse_x < task_displays[i].local.x + task_displays[i].local.w)){
               if ((mouse_y > task_displays[i].local.y) && (mouse_y < task_displays[i].local.y + task_displays[i].local.h)){
                 task_displays[i].task->mode_display_selected = TRUE;
+                task_displays[i].task->mode_edit = TRUE;
                 touched_anything = TRUE;
               }
             }
@@ -1208,6 +1264,7 @@ int main(int argc, char* argv[]){
           if (touched_anything == FALSE){
             for (size_t t=0; t<task_memory->allocation_total; ++t){
               task_memory->tasks[t].mode_display_selected = FALSE;
+              task_memory->tasks[t].mode_edit = FALSE;
             }
           }
         } // end processing mouse click
@@ -1219,6 +1276,7 @@ int main(int argc, char* argv[]){
               if (task_memory->tasks[t].mode_display_selected == TRUE){
                 for (size_t i=0; i<task_memory->tasks[t].prereq_qty; ++i){
                   task_memory->tasks[t].prereqs[i]->mode_display_selected = TRUE;
+                  task_memory->tasks[t].prereqs[i]->mode_edit = TRUE;
                 }
               }
             }
