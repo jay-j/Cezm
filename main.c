@@ -1388,6 +1388,17 @@ int main(int argc, char* argv[]){
           }
           display_selection_changed = TRUE;
         }
+
+        // deselect all
+        else if (evt.key.keysym.sym == SDLK_SPACE){
+          for (size_t t=0; t<task_memory->allocation_total; ++t){
+            if (task_memory->tasks[t].trash == FALSE){
+              task_memory->tasks[t].mode_display_selected = FALSE;
+              task_memory->tasks[t].mode_edit = FALSE;
+            }
+          }
+        }
+
          
       } // viewport display
 
