@@ -97,6 +97,7 @@ void task_memory_management(Task_Memory* tm){
 }
 
 
+// only allowed to create a task in edit mode
 Task* task_create(Task_Memory* task_memory, char* task_name, size_t task_name_length){
   Task* tasks = task_memory->tasks;
 
@@ -112,6 +113,7 @@ Task* task_create(Task_Memory* task_memory, char* task_name, size_t task_name_le
   memset((void*) task, 0, sizeof(Task));
   task->trash = FALSE;
   task->task_name_length = task_name_length;
+  task->mode_edit = TRUE; 
   
   // add to hash table
   char* name = (char*) malloc(task_name_length+1);
