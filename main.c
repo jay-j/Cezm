@@ -186,7 +186,7 @@ void task_user_remove(Task* task, User* user){
   }
 }
 
-// TODO how to make this run less / more efficiently?
+
 void task_dependents_find_all(Task_Memory* task_memory){
   Task* tasks = task_memory->tasks;
 
@@ -938,12 +938,12 @@ void editor_load_text(Task_Memory* task_memory, User_Memory* user_memory, TextBu
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-// inline this function? TODO
 char* text_append_char(char* text, char new){
   *text = new;
   ++text;
   return text;
 }
+
 
 char* text_append_string(char* text, char* addition){
   int length = snprintf(NULL, 0, "%s", addition);
@@ -952,8 +952,8 @@ char* text_append_string(char* text, char* addition){
   return text;
 }
 
+
 void editor_text_from_data(Task_Memory* task_memory, TextBuffer* text_buffer){
-  // TODO reset/clear the old buffer
   char* cursor = text_buffer->text;
 
   // Fill the new one
@@ -964,7 +964,6 @@ void editor_text_from_data(Task_Memory* task_memory, TextBuffer* text_buffer){
         // task name
         memcpy(cursor, task->task_name, task->task_name_length);
         cursor += task->task_name_length;
-
         cursor = text_append_string(cursor, " {\n");
 
         // duration
@@ -977,7 +976,6 @@ void editor_text_from_data(Task_Memory* task_memory, TextBuffer* text_buffer){
           cursor = text_append_char(cursor, '\n');
         }
           
-
         // prereqs (dependency)
         if (task->prereq_qty > 0){
           cursor = text_append_string(cursor, "  prereq: ");
@@ -990,7 +988,6 @@ void editor_text_from_data(Task_Memory* task_memory, TextBuffer* text_buffer){
           cursor -= 2;
           cursor = text_append_char(cursor, '\n');
         }
-        
         
         // users
         if (task->user_qty > 0){
@@ -1022,6 +1019,7 @@ void editor_text_from_data(Task_Memory* task_memory, TextBuffer* text_buffer){
           cursor = text_append_string(cursor, "  color: ");
           int length = snprintf(NULL, 0, "%u", task->status_color);
           int result = snprintf(cursor, length+1, "%u", task->status_color);
+          assert(result > 0);
           cursor += length;
           cursor = text_append_char(cursor, '\n');
         }
@@ -1037,7 +1035,6 @@ void editor_text_from_data(Task_Memory* task_memory, TextBuffer* text_buffer){
     text_buffer->text[0] = ' ';
     text_buffer->length = 1;
   }
-
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1095,9 +1092,8 @@ int main(int argc, char* argv[]){
   // causes some overhead. can control with SDL_StopTextInput()
   SDL_StartTextInput();
 
-  // TODO display viewport
+  // DISPLAY VIEWPORT variables; list of tasks to plot, camera stuff
   // navigation among nodes, cursor system, selection system
-  // Display Viewport variables; list of tasks to plot, camera stuff
   Task_Display* task_displays = (Task_Display*) malloc(TASK_DISPLAY_LIMIT * sizeof(Task_Display));
   size_t task_display_qty = 0;
   int display_pixels_per_day = 10; 
@@ -1143,6 +1139,7 @@ int main(int argc, char* argv[]){
 
     int render_text = 0;
     int parse_text = FALSE;
+    uint8_t display_selection_changed = FALSE;
 
     // INPUT
     SDL_Event evt;
@@ -1150,7 +1147,6 @@ int main(int argc, char* argv[]){
       if (evt.type == SDL_QUIT){
         goto cleanup;
       }
-      // TODO modal switching!
       if (evt.type == SDL_KEYDOWN && evt.key.keysym.sym == SDLK_ESCAPE){
         goto cleanup;
       }
@@ -1175,6 +1171,7 @@ int main(int argc, char* argv[]){
         parse_text = TRUE; // because load doesn't try a schedule solve
         render_text = 1;
 
+        viewport_active = VIEWPORT_EDITOR;
         text_cursor->pos = 0;
         text_cursor->x = 0;
         text_cursor->y = 0;
@@ -1282,7 +1279,9 @@ int main(int argc, char* argv[]){
       else if (viewport_active == VIEWPORT_DISPLAY){
         if (evt.key.keysym.sym == SDLK_e && evt.type == SDL_KEYDOWN){
           viewport_active = VIEWPORT_EDITOR;
-          editor_text_from_data(task_memory, text_buffer); // TODO have to manage this transition so much better
+          text_cursor->pos = 0;
+          text_cursor->x = 0;
+          text_cursor->y = 0;
           printf("switch to viewport editor\n");
           SDL_StartTextInput();
         }
@@ -1335,7 +1334,9 @@ int main(int argc, char* argv[]){
               task_memory->tasks[t].mode_edit = FALSE;
             }
           }
+          display_selection_changed = TRUE;
         } // end processing mouse click
+
         else if (evt.key.keysym.sym == SDLK_w){
           // TODO select all nested prerequisites of the given task
           // TODO or just one..  need to make this a controllable thing!
@@ -1349,9 +1350,8 @@ int main(int argc, char* argv[]){
               }
             }
           }
+          display_selection_changed = TRUE;
         }
-
-        // TODO navigate around the displayed nodes
          
       } // viewport display
 
@@ -1359,11 +1359,28 @@ int main(int argc, char* argv[]){
 
     // TODO be able to use keyboard shortcuts!
 
+    if (display_selection_changed == TRUE){
+      for (size_t u=0; u<user_memory->allocation_total; ++u){
+        user_memory->users[u].mode_edit = FALSE;
+      }
+      for (size_t t=0; t<task_memory->allocation_total; ++t){
+        if (task_memory->tasks[t].trash == FALSE){
+          if (task_memory->tasks[t].mode_edit == TRUE){
+            for (size_t u=0; u<task_memory->tasks[t].user_qty; u++){
+              task_memory->tasks[t].users[u]->mode_edit = TRUE;
+            }
+          }
+        }
+      }
+      editor_text_from_data(task_memory, text_buffer); 
+    }
+
+    // TODO navigate around the displayed nodes
     if (parse_text == TRUE){
       // extract property changes from the text
       editor_parse_text(task_memory, user_memory, text_buffer->text, text_buffer->length);
 
-      // PERFORM SCHEDULING! TODO can get fancy....
+      // PERFORM SCHEDULING!
       schedule_solve_status = schedule_solve(task_memory, schedule_best, schedule_working);
       day_project_start = schedule_best->day_start;
       
