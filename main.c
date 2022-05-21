@@ -436,7 +436,7 @@ uint64_t editor_parse_date(char* value_str, int value_str_length){
 }
 
 
-void editor_write_date(char* text_output, uint64_t day){
+char* text_append_date(char* text_output, uint64_t day){
   // convert days since epoch to second since epoch
   time_t date_epoch = day * 86400;
 
@@ -445,6 +445,8 @@ void editor_write_date(char* text_output, uint64_t day){
 
   size_t result = strftime(text_output, 11, "%F", timeinfo);
   assert(result != 0);
+
+  return text_output+10;
 }
 
 
@@ -612,6 +614,7 @@ void editor_parse_text(Task_Memory* task_memory, User_Memory* user_memory, char*
       continue;
     }
 
+    // task open
     if (memchr(line_start, (int) '{', line_working_length) != NULL){
       int task_name_length;
       char* task_name = string_strip(&task_name_length, line_start, line_working_length);
@@ -619,10 +622,12 @@ void editor_parse_text(Task_Memory* task_memory, User_Memory* user_memory, char*
       assert( task != NULL);
     }
 
+    // task close
     else if (memchr(line_start, (int) '}', line_working_length) != NULL){
       // printf("line '%.*s' ends a task\n", line_working_length, line_start);
     }
 
+    // property line
     else if(memchr(line_start, (int) ':', line_working_length) != NULL){
       editor_parse_propertyline(task_memory, user_memory, task, line_start, line_working_length);
     }
@@ -894,6 +899,7 @@ void editor_cursor_move(TextBuffer* tb, TextCursor* tc, int movedir){
 
 }
 
+// throw out everything, load from a file and parse it
 void editor_load_text(Task_Memory* task_memory, User_Memory* user_memory, TextBuffer* text_buffer, const char* filename){
 
   // open the file, create if not exist, use persmissions of current user
@@ -908,7 +914,6 @@ void editor_load_text(Task_Memory* task_memory, User_Memory* user_memory, TextBu
     } while(*(text_cursor_loading - 1) != EOF);
     fclose(fd);
     text_buffer->length -= 1;
-    //text_buffer->text[text_buffer->length] = '\0';
     printf("loaded text of length %d\n", text_buffer->length);
     printf("text is '%.*s'\n", text_buffer->length, text_buffer->text);
   }
@@ -923,7 +928,7 @@ void editor_load_text(Task_Memory* task_memory, User_Memory* user_memory, TextBu
     text_buffer->length = 1;
   }
 
-  // do a test parse of the text description
+  // do an initial parse of the text information 
   for (size_t t=0; t<task_memory->allocation_total; ++t){
     task_memory->tasks[t].mode_edit = TRUE;
   }
@@ -934,9 +939,16 @@ void editor_load_text(Task_Memory* task_memory, User_Memory* user_memory, TextBu
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 // inline this function? TODO
-char* text_push_char(char* text, char new){
+char* text_append_char(char* text, char new){
   *text = new;
   ++text;
+  return text;
+}
+
+char* text_append_string(char* text, char* addition){
+  int length = snprintf(NULL, 0, "%s", addition);
+  memcpy(text, addition, length);
+  text += length;
   return text;
 }
 
@@ -953,51 +965,69 @@ void editor_text_from_data(Task_Memory* task_memory, TextBuffer* text_buffer){
         memcpy(cursor, task->task_name, task->task_name_length);
         cursor += task->task_name_length;
 
-        *cursor++ = '{';
-        *cursor++ = '\n';
+        cursor = text_append_string(cursor, " {\n");
 
         // duration
+        if ((task->schedule_constraints & SCHEDULE_CONSTRAINT_DURATION) > 0){
+          cursor = text_append_string(cursor, "  duration: ");
+          int length = snprintf(NULL, 0, "%ld", task->day_duration);
+          int result = snprintf(cursor, length+1, "%ld", task->day_duration); // +1 due to how snprintf accounts for \0
+          assert(result > 0);
+          cursor += length;
+          cursor = text_append_char(cursor, '\n');
+        }
+          
 
-        // dependency
-        /*
+        // prereqs (dependency)
         if (task->prereq_qty > 0){
-          memcpy(cursor, "  prereq: ", 10);
-          cursor += 10;
+          cursor = text_append_string(cursor, "  prereq: ");
 
-          for (size_t i=0; i<task-> 
-        */
+          for (size_t i=0; i<task->prereq_qty; ++i){
+            memcpy(cursor, task->prereqs[i]->task_name, task->prereqs[i]->task_name_length);
+            cursor += task->prereqs[i]->task_name_length;
+            cursor = text_append_string(cursor, ", ");
+          }
+          cursor -= 2;
+          cursor = text_append_char(cursor, '\n');
+        }
         
-        // user
+        
+        // users
         if (task->user_qty > 0){
-          memcpy(cursor, "  user: ", 8);
-          cursor += 8;
+          cursor = text_append_string(cursor, "  user: ");
 
           for (size_t u=0; u<task->user_qty; ++u){
             memcpy(cursor, task->users[u]->name, task->users[u]->name_length);
             cursor += task->users[u]->name_length;
-            cursor = text_push_char(cursor, ',');
-            cursor = text_push_char(cursor, ' ');
+            cursor = text_append_string(cursor, ", ");
           }
           cursor -= 2;
-          cursor = text_push_char(cursor, '\n');
+          cursor = text_append_char(cursor, '\n');
         }
 
         // fixed dates
         if ((task->schedule_constraints & SCHEDULE_CONSTRAINT_START) > 0){
-          memcpy(cursor, "  fixed_start: ", 15);
-          cursor += 15;
-
-          // TODO date to string function
-          editor_write_date(cursor, task->day_start);
-          cursor += 10;
-          cursor = text_push_char(cursor, '\n');
+          cursor = text_append_string(cursor, "  fixed_start: ");
+          cursor = text_append_date(cursor, task->day_start);
+          cursor = text_append_char(cursor, '\n');
+        }
+        if ((task->schedule_constraints & SCHEDULE_CONSTRAINT_END) > 0){
+          cursor = text_append_string(cursor, "  fixed_end: ");
+          cursor = text_append_date(cursor, task->day_end);
+          cursor = text_append_char(cursor, '\n');
         }
 
-
+        // color
+        {
+          cursor = text_append_string(cursor, "  color: ");
+          int length = snprintf(NULL, 0, "%u", task->status_color);
+          int result = snprintf(cursor, length+1, "%u", task->status_color);
+          cursor += length;
+          cursor = text_append_char(cursor, '\n');
+        }
 
         // end this task
-        *cursor++ = '}';
-        *cursor++ = '\n';
+        cursor = text_append_string(cursor, "}\n");
       }
     }
   }
@@ -1112,7 +1142,7 @@ int main(int argc, char* argv[]){
     timer_last_loop_start_ms = SDL_GetTicks();
 
     int render_text = 0;
-    int parse_text = 0;
+    int parse_text = FALSE;
 
     // INPUT
     SDL_Event evt;
@@ -1124,12 +1154,14 @@ int main(int argc, char* argv[]){
       if (evt.type == SDL_KEYDOWN && evt.key.keysym.sym == SDLK_ESCAPE){
         goto cleanup;
       }
+      // SAVE
       if (evt.type == SDL_KEYDOWN && evt.key.keysym.sym == SDLK_s && SDL_GetModState() & KMOD_CTRL){
         printf("[file op] save requested\n");
         // regenerate text for all tasks
         // put into some temporary allocated buffer so not disrupting the current selection or editor buffer
         // save that text to the save file given by the filename on command line TODO
       }
+      // RELOAD
       if (evt.type == SDL_KEYDOWN && evt.key.keysym.sym == SDLK_r && SDL_GetModState() & KMOD_CTRL){
         printf("[file op] reload requested\n");
         // mark all tasks as being in editor
@@ -1140,7 +1172,7 @@ int main(int argc, char* argv[]){
         }
         // load file contents into the editor text buffer, this will also parse the file
         editor_load_text(task_memory, user_memory, text_buffer, argv[1]);
-        parse_text = 1; // because load doesn't try a schedule solve
+        parse_text = TRUE; // because load doesn't try a schedule solve
         render_text = 1;
 
         text_cursor->pos = 0;
@@ -1165,7 +1197,7 @@ int main(int argc, char* argv[]){
             text_buffer->line_length[text_cursor->y] -= 1; // TODO what if line length is already zero??
             editor_cursor_move(text_buffer, text_cursor, TEXTCURSOR_MOVE_DIR_LEFT);
             render_text = 1;
-            parse_text = 1;
+            parse_text = TRUE;
           }
           // handle copy?
           else if( evt.key.keysym.sym == SDLK_c && SDL_GetModState() & KMOD_CTRL){
@@ -1198,7 +1230,7 @@ int main(int argc, char* argv[]){
             ++text_buffer->length;
             editor_cursor_move(text_buffer, text_cursor, TEXTCURSOR_MOVE_DIR_RIGHT);
             render_text = 1;
-            parse_text = 1;
+            parse_text = TRUE;
 
             printf("[INSERT] RETURN\n"); 
           }
@@ -1237,7 +1269,7 @@ int main(int argc, char* argv[]){
           text_buffer->line_length[text_cursor->y] += 1;
           editor_cursor_move(text_buffer, text_cursor, TEXTCURSOR_MOVE_DIR_RIGHT);
           render_text = 1;
-          parse_text = 1;
+          parse_text = TRUE;
 
         }
         else if(evt.type == SDL_TEXTEDITING){
@@ -1327,13 +1359,15 @@ int main(int argc, char* argv[]){
 
     // TODO be able to use keyboard shortcuts!
 
-    if (parse_text == 1){
+    if (parse_text == TRUE){
       // extract property changes from the text
       editor_parse_text(task_memory, user_memory, text_buffer->text, text_buffer->length);
 
       // PERFORM SCHEDULING! TODO can get fancy....
       schedule_solve_status = schedule_solve(task_memory, schedule_best, schedule_working);
       day_project_start = schedule_best->day_start;
+      
+      // TODO insert some post scheduling work? to help with laying out things on screen
     }
 
     // DRAW
@@ -1343,8 +1377,8 @@ int main(int argc, char* argv[]){
     SDL_SetRenderDrawColor(render, 0xFF, 0xFF, 0xFF, 0xFF); // chooose every frame now
     SDL_RenderClear(render);
 
-
-   SDL_RenderSetViewport(render, &viewport_editor);
+    // editor viewport background
+    SDL_RenderSetViewport(render, &viewport_editor);
     if (viewport_active == VIEWPORT_EDITOR){
       SDL_SetRenderDrawColor(render, 0xFF, 0xFF, 0xFF, 0xFF);
     }
