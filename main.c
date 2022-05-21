@@ -354,7 +354,12 @@ void editor_parse_task_detect(Task_Memory* task_memory, char* text_start, size_t
   while (line_start < text_end){
     line_end = memchr(line_start, (int) '\n', text_end - line_start);
     if (line_end == NULL){
-      break;
+      if (text_end - line_start > 0){
+        line_end = text_end;
+      }
+      else{
+        break;
+      }
     }
     line_working_length = line_end - line_start;
     if (line_working_length == 0){
@@ -608,7 +613,12 @@ void editor_parse_text(Task_Memory* task_memory, User_Memory* user_memory, char*
   while (line_start < text_end){
     line_end = memchr(line_start, (int) '\n', text_end - line_start);
     if (line_end == NULL){
-      break;
+      if (text_end - line_start > 0){
+        line_end = text_end;
+      }
+      else{
+        break;
+      }
     }
     line_working_length = line_end - line_start;
     if (line_working_length == 0){
