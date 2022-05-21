@@ -126,3 +126,19 @@ Edit makefile so `CFLAGS = -O0 -Wall -Wextra -g -pg`.
 Compile. Run program, force it to do a bunch of text parsing and rescheduling. 
 The program will create a binary gmon.out file when it exits normally.
 Run `$ gprof main.bin gmon.out > prof_output.txt` to convert that binary file into something human readable. 
+
+# Time
+Get the current time, typically expressed as seconds since epoch: 
+```c
+time_t now;
+time(&now);
+```
+
+Convert human readable (`struct tm`) to integer increasing time with `mktime()`:
+```c
+struct tm* timeinfo;
+time_t apple = mktime(timeinfo);
+```
+
+Note that the structure `struct tm` uses years *since 1900* and months *since January* (January = 0).
+
