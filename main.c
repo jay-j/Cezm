@@ -814,7 +814,7 @@ TextBuffer* editor_buffer_init(){
   return tb;
 }
 
-void editor_bufffer_destroy(TextBuffer* tb){
+void editor_buffer_destroy(TextBuffer* tb){
   free(tb->text);
   free(tb->line_length);
 }
@@ -965,14 +965,14 @@ char* text_append_string(char* text, char* addition){
 }
 
 
-void editor_text_from_data(Task_Memory* task_memory, TextBuffer* text_buffer){
+void editor_text_from_data(Task_Memory* task_memory, TextBuffer* text_buffer, uint8_t all_tasks){
   char* cursor = text_buffer->text;
 
   // Fill the new one
   for (size_t t=0; t<task_memory->allocation_total; ++t){
     Task* task = task_memory->tasks + t;
     if (task->trash == FALSE){
-      if (task->mode_edit == TRUE){
+      if ((task->mode_edit == TRUE) || (all_tasks == TRUE)){
         // task name
         memcpy(cursor, task->task_name, task->task_name_length);
         cursor += task->task_name_length;
@@ -1046,6 +1046,20 @@ void editor_text_from_data(Task_Memory* task_memory, TextBuffer* text_buffer){
   if (text_buffer->length == 0){
     text_buffer->text[0] = ' ';
     text_buffer->length = 1;
+  }
+}
+
+
+void text_buffer_save(TextBuffer* text_buffer, char* filename){
+
+  FILE* fd = fopen(filename, "w");
+  if (fd != NULL){
+    fprintf(fd, "%.*s", text_buffer->length, text_buffer->text);
+    fclose(fd);
+    printf("[INFO] save successful.\n");
+  }
+  else{
+    printf("[ERROR] could not open file '%s'.\n", filename);
   }
 }
 
@@ -1167,9 +1181,17 @@ int main(int argc, char* argv[]){
       // SAVE
       if (evt.type == SDL_KEYDOWN && evt.key.keysym.sym == SDLK_s && SDL_GetModState() & KMOD_CTRL){
         printf("[file op] save requested\n");
-        // regenerate text for all tasks
         // put into some temporary allocated buffer so not disrupting the current selection or editor buffer
+        TextBuffer* save_buffer = editor_buffer_init();
+        
+        // regenerate text for all tasks
+        editor_text_from_data(task_memory, save_buffer, TRUE);
+
         // save that text to the save file given by the filename on command line TODO
+        text_buffer_save(save_buffer, argv[1]);
+        
+        // free the temporary text buffer
+        editor_buffer_destroy(save_buffer);
       }
       // RELOAD
       if (evt.type == SDL_KEYDOWN && evt.key.keysym.sym == SDLK_r && SDL_GetModState() & KMOD_CTRL){
@@ -1386,7 +1408,7 @@ int main(int argc, char* argv[]){
           }
         }
       }
-      editor_text_from_data(task_memory, text_buffer); 
+      editor_text_from_data(task_memory, text_buffer, FALSE); 
     }
 
     // TODO navigate around the displayed nodes
@@ -1649,7 +1671,7 @@ int main(int argc, char* argv[]){
   cleanup:
   sdl_cleanup(win, render);
   tasks_free(task_memory, user_memory);
-  editor_bufffer_destroy(text_buffer);
+  editor_buffer_destroy(text_buffer);
   schedule_free(schedule_best); 
   schedule_free(schedule_working);
   free(task_displays); 
