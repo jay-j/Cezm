@@ -384,41 +384,48 @@ void editor_parse_task_detect(Task_Memory* task_memory, char* text_start, size_t
 
 
 uint64_t editor_parse_date(char* value_str, int value_str_length){
-  struct tm timeinfo;
+  // get the current time to initialize some values of timeinfo with time zone and stuff
+  time_t now; 
+  time(&now);
+  struct tm* timeinfo = gmtime(&now);
 
   char* line_end = value_str + value_str_length;
 
   // separate year from month
   char* split1 = memchr(value_str, (int) '-', value_str_length);
   if (split1 != NULL){
-    timeinfo.tm_year = strtol(value_str, &split1, 10);
+    timeinfo->tm_year = strtol(value_str, &split1, 10);
 
     // separate month from day
     char* split2 = memchr(split1+1, (int) '-', value_str_length - (split1 - value_str) - 1);
     if (split2 != NULL){
-      timeinfo.tm_mon = strtol(split1+1, &split2, 10);
-      timeinfo.tm_mday = strtol(split2+1, &line_end, 10);
+      timeinfo->tm_mon = strtol(split1+1, &split2, 10);
+      timeinfo->tm_mday = strtol(split2+1, &line_end, 10);
     }
     // can't find a day, use start of the month as default
     else{
-      timeinfo.tm_mon = strtol(split1+1, &line_end, 10);
-      timeinfo.tm_mday = 1;
+      timeinfo->tm_mon = strtol(split1+1, &line_end, 10);
+      timeinfo->tm_mday = 1;
     }
   }
 
   // can't find a month (or day), use start as default
   else{
-    timeinfo.tm_year = strtol(value_str, &line_end, 10);
-    timeinfo.tm_mon = 1;
-    timeinfo.tm_mday = 1;
+    timeinfo->tm_year = strtol(value_str, &line_end, 10);
+    timeinfo->tm_mon = 1;
+    timeinfo->tm_mday = 1;
   }
 
   // now convert that into epoch time..
-  timeinfo.tm_sec = 0;
-  timeinfo.tm_min = 0;
-  timeinfo.tm_hour = 0;
-  time_t date_epoch = mktime(&timeinfo);
+  timeinfo->tm_year -= 1900; // years are 1900-indexed
+  timeinfo->tm_mon -= 1; // months are zero-indexed
+  timeinfo->tm_sec = 0;
+  timeinfo->tm_min = 0;
+  timeinfo->tm_hour = 0;
+  time_t date_epoch = mktime(timeinfo);
+  assert(date_epoch != -1);
 
+  // date_epoch is seconds since epoch. divide to get days since epoch
   uint64_t day = (uint64_t) date_epoch / 86400;
 
   //printf("Year: %d\n", timeinfo.tm_year);
@@ -427,6 +434,19 @@ uint64_t editor_parse_date(char* value_str, int value_str_length){
 
   return day;
 }
+
+
+void editor_write_date(char* text_output, uint64_t day){
+  // convert days since epoch to second since epoch
+  time_t date_epoch = day * 86400;
+
+  // GM time is UTC (GMT timezome - ignoring timezones)
+  struct tm* timeinfo = gmtime(&date_epoch);
+
+  size_t result = strftime(text_output, 11, "%F", timeinfo);
+  assert(result != 0);
+}
+
 
 // comma to separate values in a list
 void editor_parse_propertyline(Task_Memory* task_memory, User_Memory* user_memory, Task* task, char* line_start, int line_working_length){
@@ -569,10 +589,10 @@ void editor_parse_text(Task_Memory* task_memory, User_Memory* user_memory, char*
 
   // reset some properties for all tasks in the editor
   for (size_t t=0; t<task_memory->allocation_total; ++t){
-    // if (task_memory->tasks[t].mode_edit == TRUE){ // TODO activate this
-    task_memory->tasks[t].schedule_constraints = 0;
+    if (task_memory->tasks[t].mode_edit == TRUE){
+      task_memory->tasks[t].schedule_constraints = 0;
+    }
   }
-
 
   // PASS 2 - all task properties, now you can scrub dependencies TODO
   // read one line at a time
@@ -955,11 +975,27 @@ void editor_text_from_data(Task_Memory* task_memory, TextBuffer* text_buffer){
           for (size_t u=0; u<task->user_qty; ++u){
             memcpy(cursor, task->users[u]->name, task->users[u]->name_length);
             cursor += task->users[u]->name_length;
+            cursor = text_push_char(cursor, ',');
+            cursor = text_push_char(cursor, ' ');
           }
+          cursor -= 2;
           cursor = text_push_char(cursor, '\n');
         }
 
         // fixed dates
+        if ((task->schedule_constraints & SCHEDULE_CONSTRAINT_START) > 0){
+          memcpy(cursor, "  fixed_start: ", 15);
+          cursor += 15;
+
+          // TODO date to string function
+          editor_write_date(cursor, task->day_start);
+          cursor += 10;
+          cursor = text_push_char(cursor, '\n');
+        }
+
+
+
+        // end this task
         *cursor++ = '}';
         *cursor++ = '\n';
       }
