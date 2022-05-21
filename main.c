@@ -16,8 +16,8 @@
 #include "utilities-c/hash_lib/hashtable.h"
 
 // global
-#define WINDOW_WIDTH 1600
-#define WINDOW_HEIGHT 1000
+#define WINDOW_WIDTH_INIT 1600
+#define WINDOW_HEIGHT_INIT 1000
 #define FONTSIZE 16
 
 // modal switching
@@ -672,7 +672,7 @@ void sdl_startup(SDL_Window** win, SDL_Renderer** render){
   
   *win = SDL_CreateWindow("Jay Demo", 
     SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 
-    WINDOW_WIDTH, WINDOW_HEIGHT, SDL_WINDOW_OPENGL | SDL_WINDOW_SHOWN | SDL_WINDOW_ALLOW_HIGHDPI);
+    WINDOW_WIDTH_INIT, WINDOW_HEIGHT_INIT, SDL_WINDOW_OPENGL | SDL_WINDOW_SHOWN | SDL_WINDOW_ALLOW_HIGHDPI | SDL_WINDOW_RESIZABLE);
   assert(*win != NULL);
 
   *render = SDL_CreateRenderer(*win, -1, SDL_RENDERER_ACCELERATED);
@@ -1066,9 +1066,14 @@ int main(int argc, char* argv[]){
   SDL_Renderer* render;
   sdl_startup(&win, &render);
 
-  int win_width, win_height;
+  int window_width, window_height;
   int running = 1;
   int viewport_active = VIEWPORT_EDITOR;
+  // viewports, and dynamic sizing stuff
+  SDL_Rect viewport_editor;
+  SDL_Rect viewport_display;
+  SDL_Rect viewport_display_body;
+  SDL_Rect viewport_display_header;
 
   Task_Memory  task_memory_object;
   Task_Memory* task_memory = &task_memory_object;
@@ -1089,7 +1094,6 @@ int main(int argc, char* argv[]){
   // TODO error flagging / colors system; live syntax parsing
   TextBox editor_textbox;
   editor_textbox.color.r = 0; editor_textbox.color.g = 0; editor_textbox.color.b = 0; editor_textbox.color.a = 0xFF;
-  editor_textbox.width_max = WINDOW_WIDTH / 4;
   editor_textbox.texture = NULL;
   TextCursor* text_cursor = (TextCursor*) malloc(sizeof(TextCursor));
   text_cursor->pos = 0;
@@ -1098,7 +1102,6 @@ int main(int argc, char* argv[]){
 
   TextBox name_textbox;
   name_textbox.color.r = 0; name_textbox.color.g = 0; name_textbox.color.b = 0; name_textbox.color.a = 0xFF;
-  name_textbox.width_max = WINDOW_WIDTH * 0.75;
   name_textbox.texture = NULL;
 
   // causes some overhead. can control with SDL_StopTextInput()
@@ -1111,29 +1114,6 @@ int main(int argc, char* argv[]){
   int display_pixels_per_day = 10; 
   int display_camera_y = 0;
 
-  // viewport for left half - editor
-  SDL_Rect viewport_editor;
-  viewport_editor.x = 0;
-  viewport_editor.y = 0;
-  viewport_editor.w = WINDOW_WIDTH / 4;
-  viewport_editor.h = WINDOW_HEIGHT;
-
-  // viewport for right half - display
-  SDL_Rect viewport_display;
-  viewport_display.x = viewport_editor.w;
-  viewport_display.y = 0;
-  viewport_display.w = WINDOW_WIDTH - viewport_editor.w;
-  viewport_display.h = WINDOW_HEIGHT;
-  SDL_Rect viewport_display_header;
-  viewport_display_header.x = viewport_display.x;
-  viewport_display_header.y = viewport_display.y;
-  viewport_display_header.w = viewport_display.w;
-  viewport_display_header.h = 40;
-  SDL_Rect viewport_display_body;
-  viewport_display_body.x = viewport_display.x;
-  viewport_display_body.y = viewport_display.y + viewport_display_header.h;
-  viewport_display_body.w = viewport_display.w;
-  viewport_display_body.h = viewport_display.h - viewport_display_header.h;
 
   uint32_t timer_last_loop_start_ms = SDL_GetTicks();
   uint32_t timer_target_ms = 10;
@@ -1148,6 +1128,28 @@ int main(int argc, char* argv[]){
       SDL_Delay(timer_target_ms - (timer_last_loop_duration_ms));
     }
     timer_last_loop_start_ms = SDL_GetTicks();
+
+    // DYNAMIC WINDOW RESIZING
+    SDL_GetWindowSize(win, &window_width, &window_height);
+    viewport_editor.x = 0;
+    viewport_editor.y = 0;
+    viewport_editor.w = window_width / 4;
+    viewport_editor.h = window_height;
+    viewport_display.x = viewport_editor.w;
+    viewport_display.y = 0;
+    viewport_display.w = window_width - viewport_editor.w;
+    viewport_display.h = window_height;
+    viewport_display_header.x = viewport_display.x;
+    viewport_display_header.y = viewport_display.y;
+    viewport_display_header.w = viewport_display.w;
+    viewport_display_header.h = 40;
+    viewport_display_body.x = viewport_display.x;
+    viewport_display_body.y = viewport_display.y + viewport_display_header.h;
+    viewport_display_body.w = viewport_display.w;
+    viewport_display_body.h = viewport_display.h - viewport_display_header.h;
+
+    editor_textbox.width_max = viewport_editor.w;
+    name_textbox.width_max = window_width * 0.75;
 
     int render_text = 0;
     int parse_text = FALSE;
@@ -1398,10 +1400,6 @@ int main(int argc, char* argv[]){
       
       // TODO insert some post scheduling work? to help with laying out things on screen
     }
-
-    // DRAW
-    SDL_GetWindowSize(win, &win_width, &win_height);
-
     // clear screen
     SDL_SetRenderDrawColor(render, 0xFF, 0xFF, 0xFF, 0xFF); // chooose every frame now
     SDL_RenderClear(render);
@@ -1628,10 +1626,10 @@ int main(int argc, char* argv[]){
     SDL_RenderSetViewport(render, &viewport_display);
     if (schedule_solve_status == FAILURE){
       SDL_Rect rect_errors;
-      rect_errors.w = WINDOW_WIDTH;
+      rect_errors.w = window_width;
       rect_errors.h = 15; 
       rect_errors.x = 0; 
-      rect_errors.y = WINDOW_HEIGHT - rect_errors.h;
+      rect_errors.y = window_height - rect_errors.h;
 
       SDL_SetRenderDrawColor(render, 220, 0, 0, 255);
       SDL_RenderFillRect(render, &rect_errors);
