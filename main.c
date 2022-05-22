@@ -973,6 +973,18 @@ void editor_cursor_move(TextBuffer* tb, TextCursor* tc, int movedir){
       tc->pos += x_delta + tc->x;
     }
   }
+  else if (movedir == TEXTCURSOR_MOVE_LINE_START){
+    tc->pos -= tc->x;
+    tc->x = 0;
+  }
+  else if (movedir == TEXTCURSOR_MOVE_LINE_END){
+    int x_delta = tb->line_length[tc->y] - tc->x - 1;
+    if (x_delta > 0){
+      tc->pos += x_delta;
+      tc->x += x_delta;
+    }
+  }
+
 
   printf("move(%d): %d = (%d, %d)\n", movedir, tc->pos, tc->x, tc->y);
 
@@ -1298,6 +1310,18 @@ int main(int argc, char* argv[]){
             render_text = 1;
             parse_text = TRUE;
           }
+          else if( evt.key.keysym.sym == SDLK_DELETE && text_buffer->length > 0){
+            char* text_dst = text_buffer->text + text_cursor->pos;
+            char* text_src = text_dst + 1;
+            char* text_end = text_buffer->text + text_buffer->length;
+            memmove(text_dst, text_src, text_end-text_src); 
+
+            --text_buffer->length;
+            text_buffer->text[text_buffer->length] = '\0';
+            text_buffer->line_length[text_cursor->y] -= 1; // TODO what if line length is already zero??
+            render_text = 1;
+            parse_text = TRUE;
+          }
           // handle copy?
           else if( evt.key.keysym.sym == SDLK_c && SDL_GetModState() & KMOD_CTRL){
             printf("copy!\n");
@@ -1344,6 +1368,12 @@ int main(int argc, char* argv[]){
           }
           else if (evt.key.keysym.sym == SDLK_DOWN){
             editor_cursor_move(text_buffer, text_cursor, TEXTCURSOR_MOVE_DIR_DOWN);
+          }
+          else if (evt.key.keysym.sym == SDLK_HOME){
+            editor_cursor_move(text_buffer, text_cursor, TEXTCURSOR_MOVE_LINE_START);
+          }
+          else if (evt.key.keysym.sym == SDLK_END){
+            editor_cursor_move(text_buffer, text_cursor, TEXTCURSOR_MOVE_LINE_END);
           }
           // F2 - rename symbol in edit mode
           // SHIFT+F2 - rename symbol even if not in edit mode
