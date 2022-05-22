@@ -394,18 +394,19 @@ void editor_parse_task_detect(Task_Memory* task_memory, char* text_start, size_t
       // TODO check, prevent duplicate task names
       int task_name_length;
       char* task_name = string_strip(&task_name_length, line_start, line_working_length);
-      printf("TASK, name '%.*s'\n", task_name_length, task_name);
+      if (task_name_length > 0){
+        printf("TASK, name '%.*s'\n", task_name_length, task_name);
 
-      // now get a pointer to the task
-      task = task_get(task_memory, task_name, task_name_length);
-      if (task == NULL){
-        task = task_create(task_memory, task_name, task_name_length); // TODO is create the right action? maybe parse and then decide? 
-        printf("created task. allocations: %ld of %ld\n", task_memory->allocation_used, task_memory->allocation_total);
+        // now get a pointer to the task
+        task = task_get(task_memory, task_name, task_name_length);
+        if (task == NULL){
+          task = task_create(task_memory, task_name, task_name_length); // TODO is create the right action? maybe parse and then decide? 
+          printf("created task. allocations: %ld of %ld\n", task_memory->allocation_used, task_memory->allocation_total);
+        }
+
+        // mark task as visited
+        task_memory->editor_visited[task - task_memory->tasks] = TRUE;
       }
-
-      // mark task as visited
-      task_memory->editor_visited[task - task_memory->tasks] = TRUE;
-      // task->mode_edit = TRUE; // TODO TODO this is a hack since this should be set by the DISPLAY VIEWPORT
     }
 
     line_start = line_end + 1;
@@ -630,7 +631,7 @@ void editor_parse_text(Task_Memory* task_memory, User_Memory* user_memory, char*
   char* line_start = text_start;
   char* line_end;
   int line_working_length = 0;
-  Task* task;
+  Task* task = NULL;
   while (line_start < text_end){
     line_end = memchr(line_start, (int) '\n', text_end - line_start);
     if (line_end == NULL){
@@ -649,10 +650,18 @@ void editor_parse_text(Task_Memory* task_memory, User_Memory* user_memory, char*
 
     // task open
     if (memchr(line_start, (int) '{', line_working_length) != NULL){
+      // cleanup old tasks that haven't been closed properly yet
+      if (task != NULL){
+        task_user_remove_unvisited(task, user_memory);
+        task = NULL;
+      }
+
       int task_name_length;
       char* task_name = string_strip(&task_name_length, line_start, line_working_length);
-      task = task_get(task_memory, task_name, task_name_length);
-      assert( task != NULL);
+      if (task_name_length > 0){
+        task = task_get(task_memory, task_name, task_name_length);
+        assert( task != NULL);
+      }
     }
 
     // task close
@@ -674,6 +683,12 @@ void editor_parse_text(Task_Memory* task_memory, User_Memory* user_memory, char*
   // text at the top level creates activities with that name
   // open bracket increases to the next level
   // text at the next level causes a lookup for a struct member. colon separator
+
+  // cleanup tasks that are in the progress of being written and don't have a close brace yet
+  if (task != NULL){
+    task_user_remove_unvisited(task, user_memory);
+    task = NULL;
+  }
 
   editor_tasks_cleanup(task_memory);
   editor_users_cleanup(user_memory);
@@ -1179,6 +1194,9 @@ int main(int argc, char* argv[]){
   int display_pixels_per_day = 10; 
   int display_camera_y = 0;
 
+  uint8_t render_text = TRUE;
+  uint8_t parse_text = TRUE;
+  uint8_t display_selection_changed = TRUE; // TODO is this better as false?
 
   uint32_t timer_last_loop_start_ms = SDL_GetTicks();
   uint32_t timer_target_ms = 10;
@@ -1215,10 +1233,6 @@ int main(int argc, char* argv[]){
 
     editor_textbox.width_max = viewport_editor.w;
     name_textbox.width_max = window_width * 0.75;
-
-    int render_text = 0;
-    int parse_text = FALSE;
-    uint8_t display_selection_changed = FALSE;
 
     // INPUT
     SDL_Event evt;
@@ -1483,7 +1497,80 @@ int main(int argc, char* argv[]){
       day_project_start = schedule_best->day_start;
       
       // TODO insert some post scheduling work? to help with laying out things on screen
-    }
+      // figure out and assign columns to each user
+      if (task_memory->allocation_used > 0){
+        User* users = user_memory->users;
+        //// DRAW USER NAMES
+        // TODO what is the right way to later connect user name to a column location (eventually, in pixels)
+
+        // detect if there are any no-user tasks scheduled
+        uint8_t orphaned_tasks = FALSE;
+        for (size_t t=0; t<task_memory->allocation_total; ++t){
+          if (task_memory->tasks[t].trash == FALSE){
+            if (task_memory->tasks[t].user_qty == 0){
+              orphaned_tasks = TRUE;
+            }
+          }
+        }
+        
+        // figure out the user columns 
+        int user_column_increment = viewport_display.w / (user_memory->allocation_used + 1);
+        int nouser_column_center_px = user_column_increment/2;
+        int user_column_loc = user_column_increment + user_column_increment / 2;
+        size_t user_column_count = 1;
+        for (size_t i=0; i<user_memory->allocation_total; ++i){ // TODO move this to scheduling (not every frame)
+          if (users[i].trash == FALSE){
+            //printf("draw column for user %s\n", users[i].name);
+            users[i].column_index = user_column_count;
+            users[i].column_center_px = user_column_loc - name_textbox.width/2;
+            user_column_loc += user_column_increment;
+            user_column_count += 1;
+          }
+        }
+
+        // TODO pull out the username text box drawing
+        // TODO column sorting?
+        // have a list of pointers... so the shared 'column center pixel' is a pointer to which user, essentially.. and then those get shuffled to optimize?
+        // basically.. want a dynamically updating thing so to change column is just changing one integer, not searching through N display_tasks to change every one
+
+        // build the list of task blocks that have to be displayed
+        // expect more display blocks than tasks since one task may be worked by several users
+        for (size_t t=0; t<task_memory->allocation_total; ++t){
+          task_memory->tasks[t].dependents_display_qty = 0;
+        }
+        
+        task_display_qty = 0; // reset every loop
+        for (size_t t=0; t<task_memory->allocation_total; ++t){
+          Task* task = task_memory->tasks + t;
+          if (task->trash == FALSE){
+            if (task->user_qty > 0){  
+              for (size_t u=0; u<task->user_qty; ++u){
+                task_displays[task_display_qty].task = task;
+                task_displays[task_display_qty].column = task->users[u]->column_center_px;
+                for(size_t p=0; p<task->prereq_qty; ++p){ 
+                  Task* prereq = task->prereqs[p];
+                  prereq->dependents_display[prereq->dependents_display_qty] = &task_displays[task_display_qty];
+                  prereq->dependents_display_qty +=1;
+                }
+                ++task_display_qty;
+              }
+            }
+            else{
+              task_displays[task_display_qty].task = task;
+              task_displays[task_display_qty].column = nouser_column_center_px;
+              for(size_t p=0; p<task->prereq_qty; ++p){ 
+                Task* prereq = task->prereqs[p];
+                prereq->dependents_display[prereq->dependents_display_qty] = &task_displays[task_display_qty];
+                prereq->dependents_display_qty +=1;
+              }
+              ++task_display_qty;
+            }
+            assert(task_display_qty < TASK_DISPLAY_LIMIT);
+          }
+        }
+      }
+    } // end parse text & schedule
+
     // clear screen
     SDL_SetRenderDrawColor(render, 0xFF, 0xFF, 0xFF, 0xFF); // chooose every frame now
     SDL_RenderClear(render);
@@ -1596,72 +1683,25 @@ int main(int argc, char* argv[]){
 
 
     SDL_RenderSetViewport(render, &viewport_display_header);
-    // figure out and assign columns to each user
-    // TODO when should this step be done vs. building the display list?
-    if (task_memory->allocation_used > 0){
-      User* users = user_memory->users;
-      //// DRAW USER NAMES
-      // TODO what is the right way to later connect user name to a column location (eventually, in pixels)
 
-      int user_column_increment = viewport_display.w / (user_memory->allocation_used + 1);
-      int nouser_column_center_px = user_column_increment/2;
-      int user_column_loc = user_column_increment + user_column_increment / 2;
-      size_t user_column_count = 1;
-      for (size_t i=0; i<user_memory->allocation_total; ++i){ // TODO move this to scheduling (not every frame)
-        if (users[i].trash == FALSE){
-          //printf("draw column for user %s\n", users[i].name);
-          users[i].column_index = user_column_count;
-          users[i].column_center_px = user_column_loc - name_textbox.width/2;
-          sdlj_textbox_render(render, &name_textbox, users[i].name);
+    // DRAW USERNAME HEADERS
+    if (user_memory->allocation_used > 0){
+      for(size_t i=0; i<user_memory->allocation_total; ++i){
+        if (user_memory->users[i].trash == FALSE){
+          sdlj_textbox_render(render, &name_textbox, user_memory->users[i].name);
           SDL_Rect src = {0, 0, name_textbox.width, name_textbox.height};
           SDL_Rect dst = {
-            users[i].column_center_px - name_textbox.width/2,
+            user_memory->users[i].column_center_px - name_textbox.width/2,
             5, 
             name_textbox.width, name_textbox.height};
           assert(SDL_RenderCopy(render, name_textbox.texture, &src, &dst) == 0);
-
-          user_column_loc += user_column_increment;
-          user_column_count += 1;
         }
       }
+    }
 
-      // TODO is there a more efficient way to do this?? build the structure only on reschedule, only update pixels every frame?
-      for (size_t t=0; t<task_memory->allocation_total; ++t){
-        task_memory->tasks[t].dependents_display_qty = 0;
-      }
-      
-      // build the display lists TODO move to scheduling (not every frame)
-      task_display_qty = 0; // reset every loop
-      for (size_t t=0; t<task_memory->allocation_total; ++t){
-        Task* task = task_memory->tasks + t;
-        if (task->trash == FALSE){
-          if (task->user_qty > 0){  
-            for (size_t u=0; u<task->user_qty; ++u){
-              task_displays[task_display_qty].task = task;
-              task_displays[task_display_qty].column = task->users[u]->column_center_px;
-              for(size_t p=0; p<task->prereq_qty; ++p){ // TODO perform this linking in scheduling
-                Task* prereq = task->prereqs[p];
-                prereq->dependents_display[prereq->dependents_display_qty] = &task_displays[task_display_qty];
-                prereq->dependents_display_qty +=1;
-              }
-              ++task_display_qty;
-            }
-          }
-          else{
-            task_displays[task_display_qty].task = task;
-            task_displays[task_display_qty].column = nouser_column_center_px;
-            for(size_t p=0; p<task->prereq_qty; ++p){ // TODO perfom this linking in scheduling
-              Task* prereq = task->prereqs[p];
-              prereq->dependents_display[prereq->dependents_display_qty] = &task_displays[task_display_qty];
-              prereq->dependents_display_qty +=1;
-            }
-            ++task_display_qty;
-          }
-          assert(task_display_qty < TASK_DISPLAY_LIMIT);
-        }
-      }
-
-      
+   
+    // DRAW THE TASKS AND RELATION CURVES
+    if (task_memory->allocation_used > 0){      
       // parse the display list to assign pixel values and display
       SDL_RenderSetViewport(render, &viewport_display_body);
 
@@ -1723,6 +1763,10 @@ int main(int argc, char* argv[]){
     //// UPDATE SCREEN
     SDL_RenderPresent(render);
 
+    // reset for the next loop
+    render_text = FALSE;
+    parse_text = FALSE;
+    display_selection_changed = FALSE;
   } // while forever
 
 
