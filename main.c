@@ -13,6 +13,7 @@
 #include <SDL2/SDL_ttf.h>
 
 #include "schedule.h"
+#include "keyboard_bindings.h"
 #include "utilities-c/hash_lib/hashtable.h"
 
 // global
@@ -1244,7 +1245,7 @@ int main(int argc, char* argv[]){
         goto cleanup;
       }
       // SAVE
-      if (evt.type == SDL_KEYDOWN && evt.key.keysym.sym == SDLK_s && SDL_GetModState() & KMOD_CTRL){
+      if (keybind_global_file_save(evt) == TRUE){
         printf("[file op] save requested\n");
         // put into some temporary allocated buffer so not disrupting the current selection or editor buffer
         TextBuffer* save_buffer = editor_buffer_init();
@@ -1259,7 +1260,7 @@ int main(int argc, char* argv[]){
         editor_buffer_destroy(save_buffer);
       }
       // RELOAD
-      if (evt.type == SDL_KEYDOWN && evt.key.keysym.sym == SDLK_r && SDL_GetModState() & KMOD_CTRL){
+      if (keybind_global_file_reload(evt) == TRUE){
         printf("[file op] reload requested\n");
         // mark all tasks as being in editor
         for (size_t t=0; t<task_memory->allocation_total; ++t){
@@ -1310,7 +1311,7 @@ int main(int argc, char* argv[]){
             // TODO need to update length! 
             printf("paste!\n");
           }
-          else if (evt.key.keysym.sym == SDLK_e && SDL_GetModState() & KMOD_CTRL){
+          else if (keybind_editor_set_mode_display(evt) == TRUE){
             viewport_active = VIEWPORT_DISPLAY;
             printf("switch to display viewport\n");
             SDL_StopTextInput();
@@ -1378,7 +1379,7 @@ int main(int argc, char* argv[]){
       } // viewport editor
 
       else if (viewport_active == VIEWPORT_DISPLAY){
-        if (evt.key.keysym.sym == SDLK_e && evt.type == SDL_KEYDOWN){
+        if (keybind_display_set_mode_edit(evt) == TRUE){
           viewport_active = VIEWPORT_EDITOR;
           text_cursor->pos = 0;
           text_cursor->x = 0;
@@ -1386,20 +1387,20 @@ int main(int argc, char* argv[]){
           printf("switch to viewport editor\n");
           SDL_StartTextInput();
         }
-        else if (evt.key.keysym.sym == SDLK_EQUALS){ // time zoom in. the plus key on us keyboards
+        else if (keybind_display_camera_time_zoom_in(evt) == TRUE){
           display_pixels_per_day += 1;
           printf("zoom in\n"); 
         }
-        else if (evt.key.keysym.sym == SDLK_MINUS){ // time zoom out
+        else if (keybind_display_camera_time_zoom_out(evt) == TRUE){
           if (display_pixels_per_day > 1){
             display_pixels_per_day -= 1;
             printf("zoom out\n"); 
           }
         }
-        else if (evt.key.keysym.sym == SDLK_u){
+        else if (keybind_display_camera_time_scroll_up(evt) == TRUE){
           display_camera_y -= 3;
         }
-        else if (evt.key.keysym.sym == SDLK_i){
+        else if (keybind_display_camera_time_scroll_down(evt) == TRUE){
           display_camera_y += 3;
         }
         else if (evt.type == SDL_MOUSEMOTION){
@@ -1438,7 +1439,7 @@ int main(int argc, char* argv[]){
           display_selection_changed = TRUE;
         } // end processing mouse click
 
-        else if (evt.key.keysym.sym == SDLK_w){
+        else if (keybind_display_select_prereq_one(evt) == TRUE){
           // TODO select all nested prerequisites of the given task
           // TODO or just one..  need to make this a controllable thing!
           for (size_t t=0; t<task_memory->allocation_total; ++t){
@@ -1454,8 +1455,12 @@ int main(int argc, char* argv[]){
           display_selection_changed = TRUE;
         }
 
+        else if (keybind_display_select_prereq_all(evt) == TRUE){
+          assert(0); // TODO implement
+        }
+
         // deselect all
-        else if (evt.key.keysym.sym == SDLK_SPACE){
+        else if (keybind_display_select_none(evt) == TRUE){
           for (size_t t=0; t<task_memory->allocation_total; ++t){
             if (task_memory->tasks[t].trash == FALSE){
               task_memory->tasks[t].mode_display_selected = FALSE;

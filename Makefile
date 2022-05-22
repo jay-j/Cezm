@@ -2,7 +2,7 @@ CFLAGS = -O0 -Wall -Wextra -g
 
 # for Linux
 LIB_BUILTIN = -lSDL2 -lm -lSDL2_ttf
-LIB = schedule.h utilities-c/hash_lib/hashtable.h
+LIB = schedule.h keyboard_bindings.h utilities-c/hash_lib/hashtable.h
 LIBOBJ = utilities-c/hash_lib/hashtable.o
 
 all: main.bin
