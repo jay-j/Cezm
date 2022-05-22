@@ -165,6 +165,7 @@ void task_user_add(Task* task, User* user){
 }
 
 
+// edits task to remove user, and user to remove task
 void task_user_remove(Task* task, User* user){
   size_t id = 0;
   uint8_t found = 0;
@@ -186,8 +187,39 @@ void task_user_remove(Task* task, User* user){
     }
     task->user_qty -= 1;
   }
+
+  // now remove the task from the user struct
+  uint8_t found2 = 0;
+  for(size_t i=0; i<user->task_qty; ++i){
+    if (user->tasks[i] == task){
+      id = i;
+      found2 = 1;
+      break;
+    }
+  }
+
+  if (found2 == 1){
+    // and shuffle down the remaining users
+    for (size_t i=id; i<user->task_qty; ++i){
+      user->tasks[i] = user->tasks[i+1];
+    }
+    user->task_qty -= 1;
+  }
+
+  assert(found == found2);
 }
 
+
+void task_user_remove_unvisited(Task* task, User_Memory* user_memory){
+  for (size_t u=0; u<task->user_qty; ++u){
+    User* user = task->users[u];
+    size_t uindex = user - user_memory->users;
+    if (user_memory->editor_visited[uindex] == FALSE){
+      task_user_remove(task, user);
+    }
+  }
+}
+    
 
 void task_dependents_find_all(Task_Memory* task_memory){
   Task* tasks = task_memory->tasks;
@@ -313,34 +345,25 @@ void editor_tasks_cleanup(Task_Memory* task_memory){
 }
 
 
-// TODO this has a bug.. not removing tasks from users properly when that user is removed from one task but still has other valid tasks
-// don't track seen user? track seen task.user? 
 void editor_users_cleanup(User_Memory* user_memory){
   User* users = user_memory->users;
 
-  // scrub through users, remove any that you expected to see but did not
+  // scrub through users, remove any that don't have any more assigned tasks at all
   for (size_t i=0; i<user_memory->allocation_total; ++i){
     if(users[i].trash == FALSE){
-      if (user_memory->editor_visited[i] == FALSE){
+      if (users[i].task_qty == 0){
 
-        if (users[i].mode_edit == TRUE){
-          // this user was expected to be seen upon parsing but was not; delete them!!
-          users[i].trash = TRUE;
-          if (user_memory->allocation_used > 0){
-            user_memory->allocation_used -= 1;
-          }
-          printf("REMOVING users[%ld].name=%s..\n", i, users[i].name);
-
-          // user deleted, remove them from all their tasks
-          for(size_t j=0; j<users[i].task_qty; ++j){
-            task_user_remove(users[i].tasks[j], users+i);
-          }
-
-          hash_table_remove(user_memory->hashtable, users[i].name);
+        users[i].trash = TRUE;
+        if (user_memory->allocation_used > 0){
+          user_memory->allocation_used -= 1;
         }
+        printf("REMOVING users[%ld].name=%s..\n", i, users[i].name);
+
+        hash_table_remove(user_memory->hashtable, users[i].name);
       }
     }
   }
+  hash_table_print(user_memory->hashtable);
 }
 
 
@@ -477,8 +500,6 @@ void editor_parse_propertyline(Task_Memory* task_memory, User_Memory* user_memor
   }
 
   if (memcmp(property_str, "user", 4) == 0){
-    printf("user property familiar!\n");
-
     // split on ','
     char* property_split_start = value_str;
     char* property_split_end = value_str;
@@ -589,7 +610,7 @@ void editor_parse_text(Task_Memory* task_memory, User_Memory* user_memory, char*
   for (size_t i=0; i<task_memory->allocation_total; ++i){
     if (tasks[i].mode_edit == TRUE){
       tasks[i].prereq_qty = 0;
-      tasks[i].user_qty = 0;
+      //tasks[i].user_qty = 0;
     }
   }
 
@@ -636,7 +657,10 @@ void editor_parse_text(Task_Memory* task_memory, User_Memory* user_memory, char*
 
     // task close
     else if (memchr(line_start, (int) '}', line_working_length) != NULL){
-      // printf("line '%.*s' ends a task\n", line_working_length, line_start);
+      if (task != NULL){
+        task_user_remove_unvisited(task, user_memory);
+        task = NULL;
+      }
     }
 
     // property line
@@ -670,7 +694,7 @@ void sdl_startup(SDL_Window** win, SDL_Renderer** render){
     assert(0);
   }
   
-  *win = SDL_CreateWindow("Jay Demo", 
+  *win = SDL_CreateWindow("[unnamed project planning software]", 
     SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 
     WINDOW_WIDTH_INIT, WINDOW_HEIGHT_INIT, SDL_WINDOW_OPENGL | SDL_WINDOW_SHOWN | SDL_WINDOW_ALLOW_HIGHDPI | SDL_WINDOW_RESIZABLE);
   assert(*win != NULL);
