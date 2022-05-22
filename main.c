@@ -776,6 +776,33 @@ void task_draw_box(SDL_Renderer* render, Task_Display* task_display){
   SDL_FreeSurface(surface);
 }
 
+
+// TODO make more efficient with some texture caching? 
+// TODO lower transparency if drawing behind something?
+void draw_dependency_curve(SDL_Renderer* render, int start_x, int start_y, int end_x, int end_y){ 
+  float increment = 1.0 / 48.0; 
+  float t = 0;
+  
+  int control_offset = 80;
+  int draw_start_x = start_x;
+  int draw_start_y = start_y;
+  int draw_end_x;
+  int draw_end_y;
+  while (t < 1 + increment){
+    // calulcate coordinates
+    draw_end_x = (1-t)*(1-t)*(1-t)*start_x + 3.0*(1-t)*(1-t)*t*start_x + 3.0*(1-t)*t*t*end_x + t*t*t*end_x;
+    draw_end_y = (1-t)*(1-t)*(1-t)*start_y + 3.0*(1-t)*(1-t)*t*(start_y+control_offset) + 3.0*(1-t)*t*t*(end_y - control_offset) + t*t*t*end_y;
+
+    // draw
+    SDL_RenderDrawLine(render, draw_start_x, draw_start_y, draw_end_x, draw_end_y); 
+    
+    // increment
+    t += increment;
+    draw_start_x = draw_end_x;
+    draw_start_y = draw_end_y;
+  }
+}
+
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 
@@ -1671,7 +1698,7 @@ int main(int argc, char* argv[]){
           int start_y = td->local.y + td->local.h;
           int end_x = td_dep->local.x + td_dep->local.w/2;
           int end_y = td_dep->local.y;
-          SDL_RenderDrawLine(render, start_x, start_y, end_x, end_y);
+          draw_dependency_curve(render, start_x, start_y, end_x, end_y);
         }
       }
 
