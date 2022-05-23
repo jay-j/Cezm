@@ -535,9 +535,11 @@ int schedule_solve(Task_Memory* task_memory, Schedule_Event_List* schedule_best,
     for(size_t e=0; e<schedule_best->qty; ++e){
       schedule_best->events[e].task->day_start = schedule_best->events[e].date;
     }
+    printf("[SCHEDULER] schedule solve done, SUCCESS.\n");
     return SUCCESS;
   }
   else{
+    printf("[SCHEDULER] schedule solve done, FAILURE.\n");
     return FAILURE;
   }
 

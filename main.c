@@ -396,7 +396,7 @@ void editor_parse_task_detect(Task_Memory* task_memory, char* text_start, size_t
       int task_name_length;
       char* task_name = string_strip(&task_name_length, line_start, line_working_length);
       if (task_name_length > 0){
-        printf("TASK, name '%.*s'\n", task_name_length, task_name);
+        printf("detected task: '%.*s'\n", task_name_length, task_name);
 
         // now get a pointer to the task
         task = task_get(task_memory, task_name, task_name_length);
@@ -616,7 +616,7 @@ void editor_parse_text(Task_Memory* task_memory, User_Memory* user_memory, char*
     }
   }
 
-  // PASS 1 - just add/remove tasks 
+  // PASS 1 - just add/remove tasks, mark them as visited. new tasks are marked edit_mode = TRUE
   editor_parse_task_detect(task_memory, text_start, text_length);
 
   // reset some properties for all tasks in the editor
@@ -626,7 +626,7 @@ void editor_parse_text(Task_Memory* task_memory, User_Memory* user_memory, char*
     }
   }
 
-  // PASS 2 - all task properties, now you can scrub dependencies TODO
+  // PASS 2 - all task properties, now you can scrub dependencies
   // read one line at a time
   printf("[STATUS] PASS 2 working through the properties\n");
   char* line_start = text_start;
@@ -668,6 +668,7 @@ void editor_parse_text(Task_Memory* task_memory, User_Memory* user_memory, char*
     // task close
     else if (memchr(line_start, (int) '}', line_working_length) != NULL){
       if (task != NULL){
+        printf("detected '}' ... cleaning up / closing task '%s'\n", task->task_name);
         task_user_remove_unvisited(task, user_memory);
         task = NULL;
       }
@@ -681,6 +682,7 @@ void editor_parse_text(Task_Memory* task_memory, User_Memory* user_memory, char*
     // advance to the next line
     line_start = line_end + 1;
   } // done going through lines
+
   // text at the top level creates activities with that name
   // open bracket increases to the next level
   // text at the next level causes a lookup for a struct member. colon separator
@@ -1209,7 +1211,7 @@ int main(int argc, char* argv[]){
 
   uint8_t render_text = TRUE;
   uint8_t parse_text = TRUE;
-  uint8_t display_selection_changed = TRUE; // TODO is this better as false?
+  uint8_t display_selection_changed = FALSE; // TODO which is better to init?
 
   uint32_t timer_last_loop_start_ms = SDL_GetTicks();
   uint32_t timer_target_ms = 10;
@@ -1504,9 +1506,8 @@ int main(int argc, char* argv[]){
 
     } // end processing events
 
-    // TODO be able to use keyboard shortcuts!
-
     if (display_selection_changed == TRUE){
+      printf("[STATUS] DISPLAY SELECTION CHANGED=============\n");
       for (size_t u=0; u<user_memory->allocation_total; ++u){
         user_memory->users[u].mode_edit = FALSE;
       }
@@ -1522,8 +1523,15 @@ int main(int argc, char* argv[]){
       editor_text_from_data(task_memory, text_buffer, FALSE); 
     }
 
+    if ((display_selection_changed == TRUE) || (parse_text == TRUE)){
+      // figure out how many lines there are to render
+      editor_find_line_lengths(text_buffer);
+    }
+
     // TODO navigate around the displayed nodes
     if (parse_text == TRUE){
+      printf("[STATUS] TEXT PARSING REQUESTED--------------------------------------\n");
+
       // extract property changes from the text
       editor_parse_text(task_memory, user_memory, text_buffer->text, text_buffer->length);
 
@@ -1553,11 +1561,10 @@ int main(int argc, char* argv[]){
         int nouser_column_center_px = user_column_increment/2;
         int user_column_loc = user_column_increment + user_column_increment / 2;
         size_t user_column_count = 1;
-        for (size_t i=0; i<user_memory->allocation_total; ++i){ // TODO move this to scheduling (not every frame)
+        for (size_t i=0; i<user_memory->allocation_total; ++i){ 
           if (users[i].trash == FALSE){
-            //printf("draw column for user %s\n", users[i].name);
             users[i].column_index = user_column_count;
-            users[i].column_center_px = user_column_loc - name_textbox.width/2;
+            users[i].column_center_px = user_column_loc;
             user_column_loc += user_column_increment;
             user_column_count += 1;
           }
@@ -1623,9 +1630,7 @@ int main(int argc, char* argv[]){
     // text rendering, and figure out where the cursor is
     if (1 == 1){ // TODO if (render_text == 1)
       if (text_buffer->length > 0){
-        // figure out how many lines there are to render
-        editor_find_line_lengths(text_buffer);
-
+        
         char* line_start = text_buffer->text;
         char* line_end = NULL; 
         char* text_buffer_end = text_buffer->text + text_buffer->length;
@@ -1734,7 +1739,6 @@ int main(int argc, char* argv[]){
       }
     }
 
-   
     // DRAW THE TASKS AND RELATION CURVES
     if (task_memory->allocation_used > 0){      
       // parse the display list to assign pixel values and display
@@ -1774,6 +1778,9 @@ int main(int argc, char* argv[]){
           int end_x = td_dep->local.x + td_dep->local.w/2;
           int end_y = td_dep->local.y;
           draw_dependency_curve(render, start_x, start_y, end_x, end_y);
+          draw_dependency_curve(render, start_x+1, start_y, end_x+1, end_y);
+          draw_dependency_curve(render, start_x-1, start_y, end_x-1, end_y);
+
         }
       }
 
