@@ -32,7 +32,6 @@
 TTF_Font* global_font = NULL;
 
 // viewport-display related
-#define DISPLAY_TASK_SELECTED (1)
 #define TASK_DISPLAY_LIMIT 1024
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -743,7 +742,7 @@ void task_draw_box(SDL_Renderer* render, Task_Display* task_display){
   int border = 3;
 
   // draw outline if SELECTED
-  if (task_display->task->mode_display_selected == TRUE){
+  if (task_display->task->mode_edit == TRUE){
     SDL_Rect outline;
     outline.x = task_display->local.x-border;
     outline.y = task_display->local.y-border;
@@ -1208,6 +1207,7 @@ int main(int argc, char* argv[]){
   size_t task_display_qty = 0;
   int display_pixels_per_day = 10; 
   int display_camera_y = 0;
+  Task* display_task_active = NULL;
 
   uint8_t render_text = TRUE;
   uint8_t parse_text = TRUE;
@@ -1456,7 +1456,7 @@ int main(int argc, char* argv[]){
           for (size_t i=0; i<task_display_qty; ++i){
             if ((mouse_x > task_displays[i].local.x) && (mouse_x < task_displays[i].local.x + task_displays[i].local.w)){
               if ((mouse_y > task_displays[i].local.y) && (mouse_y < task_displays[i].local.y + task_displays[i].local.h)){
-                task_displays[i].task->mode_display_selected = TRUE;
+                display_task_active = task_displays[i].task;
                 task_displays[i].task->mode_edit = TRUE;
                 touched_anything = TRUE;
               }
@@ -1464,7 +1464,7 @@ int main(int argc, char* argv[]){
           }
           if (touched_anything == FALSE){
             for (size_t t=0; t<task_memory->allocation_total; ++t){
-              task_memory->tasks[t].mode_display_selected = FALSE;
+              display_task_active = NULL;
               task_memory->tasks[t].mode_edit = FALSE;
             }
           }
@@ -1476,9 +1476,8 @@ int main(int argc, char* argv[]){
           // TODO or just one..  need to make this a controllable thing!
           for (size_t t=0; t<task_memory->allocation_total; ++t){
             if (task_memory->tasks[t].trash == FALSE){
-              if (task_memory->tasks[t].mode_display_selected == TRUE){
+              if (task_memory->tasks[t].mode_edit == TRUE){
                 for (size_t i=0; i<task_memory->tasks[t].prereq_qty; ++i){
-                  task_memory->tasks[t].prereqs[i]->mode_display_selected = TRUE;
                   task_memory->tasks[t].prereqs[i]->mode_edit = TRUE;
                 }
               }
@@ -1495,7 +1494,7 @@ int main(int argc, char* argv[]){
         else if (keybind_display_select_none(evt) == TRUE){
           for (size_t t=0; t<task_memory->allocation_total; ++t){
             if (task_memory->tasks[t].trash == FALSE){
-              task_memory->tasks[t].mode_display_selected = FALSE;
+              display_task_active = NULL;
               task_memory->tasks[t].mode_edit = FALSE;
             }
           }
@@ -1738,6 +1737,40 @@ int main(int argc, char* argv[]){
         }
       }
     }
+
+    // DRAW the schedule lines
+    {
+      SDL_RenderSetViewport(render, &viewport_display_body);
+      SDL_SetRenderDrawColor(render, 0xA0, 0xA0, 0xA0, 0xFF);
+      // three weeks, one day resolution
+      int start_x = 0;
+      int end_x = viewport_display_body.w;
+
+      // days for 3 weeks
+      int i=0;
+      int limit1 = 7*3;
+      int limit2 = 7*3 + limit1;
+      while (i<200){
+        int global_y = display_pixels_per_day*i; // TODO modify based on now()??
+        int local_y = global_y + display_camera_y;
+        SDL_RenderDrawLine(render, start_x, local_y, end_x, local_y);
+
+        if (i < limit1){ // increment 1 day
+          i += 1;
+        }
+        else if(i < limit2){ // increment 1 week chunks
+          i += 7;
+        }
+        else{ // increment 4 week chunks
+          i += 7*4;
+        }
+      }
+
+
+      
+    }
+
+    // DRAW the keyboard cursor for display mode
 
     // DRAW THE TASKS AND RELATION CURVES
     if (task_memory->allocation_used > 0){      

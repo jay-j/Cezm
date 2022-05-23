@@ -62,7 +62,6 @@ struct Task{
   size_t task_name_length;
   uint8_t trash;
   uint8_t mode_edit;
-  uint8_t mode_display_selected; // what is the point of this vs. mode_edit? maybe display selected is what the user has actually clicked? 
   uint8_t schedule_done;
 
   User* users[TASK_USERS_MAX];
