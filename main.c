@@ -1746,12 +1746,18 @@ int main(int argc, char* argv[]){
       int start_x = 0;
       int end_x = viewport_display_body.w;
 
+      // show these lines relative to today
+      time_t now_tmp;
+      time(&now_tmp);
+      int today_offset = (int) now_tmp / 86400; 
+      today_offset -= (int) day_project_start;
+
       // days for 3 weeks
       int i=0;
       int limit1 = 7*3;
       int limit2 = 7*3 + limit1;
       while (i<200){
-        int global_y = display_pixels_per_day*i; // TODO modify based on now()??
+        int global_y = display_pixels_per_day*(i + today_offset);
         int local_y = global_y + display_camera_y;
         SDL_RenderDrawLine(render, start_x, local_y, end_x, local_y);
 
@@ -1765,9 +1771,6 @@ int main(int argc, char* argv[]){
           i += 7*4;
         }
       }
-
-
-      
     }
 
     // DRAW the keyboard cursor for display mode
