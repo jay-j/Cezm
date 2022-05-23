@@ -44,6 +44,13 @@ uint8_t keybind_display_camera_time_zoom_in(SDL_Event evt){
   return FALSE;
 }
 
+uint8_t keybind_display_camera_time_zoom_all(SDL_Event evt){
+  if (evt.key.keysym.sym == SDLK_HOME){
+    return TRUE;
+  }
+  return FALSE;
+}
+
 uint8_t keybind_display_camera_time_zoom_out(SDL_Event evt){
   if (evt.key.keysym.sym == SDLK_MINUS){ 
     return TRUE;

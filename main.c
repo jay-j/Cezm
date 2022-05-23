@@ -1419,6 +1419,8 @@ int main(int argc, char* argv[]){
           printf("switch to viewport editor\n");
           SDL_StartTextInput();
         }
+
+        // zoom and camera motions
         else if (keybind_display_camera_time_zoom_in(evt) == TRUE){
           display_pixels_per_day += 1;
           printf("zoom in\n"); 
@@ -1435,6 +1437,11 @@ int main(int argc, char* argv[]){
         else if (keybind_display_camera_time_scroll_down(evt) == TRUE){
           display_camera_y += 3;
         }
+        else if (keybind_display_camera_time_zoom_all(evt) == TRUE){
+          display_camera_y = 0;
+          display_pixels_per_day = (viewport_display_body.h ) / (schedule_best->day_duration);
+        }
+
         else if (evt.type == SDL_MOUSEMOTION){
           // mouse state is within the entire window
           int mouse_x, mouse_y;
