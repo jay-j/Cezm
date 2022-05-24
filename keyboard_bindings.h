@@ -19,23 +19,17 @@ uint8_t keybind_global_file_reload(SDL_Event evt){
   return FALSE;
 }
 
+uint8_t keybind_viewport_mode_toggle(SDL_Event evt){
+  if (evt.key.keysym.sym == SDLK_TAB && evt.type == SDL_KEYDOWN){
+    return TRUE;
+  }
+  return FALSE;
+}
+
 //// editor mode keybindings ////
 
-uint8_t keybind_editor_set_mode_display(SDL_Event evt){
-  if (evt.key.keysym.sym == SDLK_e && SDL_GetModState() & KMOD_CTRL){
-    return TRUE;
-  }
-  return FALSE;
-}
 
 //// display mode keybindings ////
-
-uint8_t keybind_display_set_mode_edit(SDL_Event evt){
-  if (evt.key.keysym.sym == SDLK_e && evt.type == SDL_KEYDOWN){
-    return TRUE;
-  }
-  return FALSE;
-}
 
 uint8_t keybind_display_camera_time_zoom_in(SDL_Event evt){
   if (evt.key.keysym.sym == SDLK_EQUALS){ //the plus key on us keyboards
@@ -94,5 +88,18 @@ uint8_t keybind_display_select_none(SDL_Event evt){
   return FALSE;
 }
 
+uint8_t keybind_display_task_create_split(SDL_Event evt){
+  if (evt.key.keysym.sym == SDLK_x && evt.type == SDL_KEYDOWN){
+    return TRUE;
+  }
+  return FALSE;
+}
+
+uint8_t keybind_display_task_create_successor(SDL_Event evt){
+  if (evt.key.keysym.sym == SDLK_a && evt.type == SDL_KEYDOWN){
+    return TRUE;
+  }
+  return FALSE;
+}
 
 #endif

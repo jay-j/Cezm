@@ -1292,7 +1292,23 @@ int main(int argc, char* argv[]){
         text_cursor->x = 0;
         text_cursor->y = 0;
       }
-      
+
+      if (keybind_viewport_mode_toggle(evt) == TRUE){
+        if (viewport_active == VIEWPORT_DISPLAY){
+          viewport_active = VIEWPORT_EDITOR;
+          text_cursor->pos = 0;
+          text_cursor->x = 0;
+          text_cursor->y = 0;
+          printf("switch to viewport editor\n");
+          SDL_StartTextInput();
+        }
+        else if(viewport_active == VIEWPORT_EDITOR){
+          viewport_active = VIEWPORT_DISPLAY;
+          printf("switch to display viewport\n");
+          SDL_StopTextInput();
+        }
+      }
+
       if (viewport_active == VIEWPORT_EDITOR){
         
         // special key input
@@ -1336,11 +1352,6 @@ int main(int argc, char* argv[]){
             //render_text = 1;
             // TODO need to update length! 
             printf("paste!\n");
-          }
-          else if (keybind_editor_set_mode_display(evt) == TRUE){
-            viewport_active = VIEWPORT_DISPLAY;
-            printf("switch to display viewport\n");
-            SDL_StopTextInput();
           }
           else if (evt.key.keysym.sym == SDLK_RETURN){
             // move text to make space for inserting characters
@@ -1411,17 +1422,8 @@ int main(int argc, char* argv[]){
       } // viewport editor
 
       else if (viewport_active == VIEWPORT_DISPLAY){
-        if (keybind_display_set_mode_edit(evt) == TRUE){
-          viewport_active = VIEWPORT_EDITOR;
-          text_cursor->pos = 0;
-          text_cursor->x = 0;
-          text_cursor->y = 0;
-          printf("switch to viewport editor\n");
-          SDL_StartTextInput();
-        }
-
         // zoom and camera motions
-        else if (keybind_display_camera_time_zoom_in(evt) == TRUE){
+        if (keybind_display_camera_time_zoom_in(evt) == TRUE){
           display_pixels_per_day += 1;
           printf("zoom in\n"); 
         }
