@@ -1624,6 +1624,55 @@ int main(int argc, char* argv[]){
             }
           } // end duplication of all tasks in edit mode
         } // end task split 
+
+        else if (keybind_display_task_create_successor(evt)){
+          // record what is edit mode now
+          for (size_t t=0; t<task_memory->allocation_total; ++t){
+            if ((task_memory->tasks[t].trash == FALSE) && (task_memory->tasks[t].mode_edit == TRUE)){
+              task_memory->temp_status[t] = TRUE;
+            }
+            else{
+              task_memory->temp_status[t] = FALSE;
+            }
+          }
+
+          // now make next
+          for (size_t t=0; t<task_memory->allocation_total; ++t){
+            if (task_memory->temp_status[t] == TRUE){
+              // look at this base class
+              Task* base = task_memory->tasks + t;
+
+              // find a new name, create the new task
+              char* name_new = (char*) malloc(base->task_name_length + 4);
+              int name_new_length;
+              task_name_generate(task_memory, base, name_new, &name_new_length);
+              Task* new = task_create(task_memory, name_new, name_new_length);
+              free(name_new);
+
+              // copy properties! 
+              new->trash = FALSE;
+              new->mode_edit = TRUE;
+              new->schedule_done = FALSE;
+              new->status_color = base->status_color;
+              new->user_qty = base->user_qty;
+              for (size_t u=0; u<new->user_qty; ++u){
+                new->users[u] = base->users[u];
+              }
+
+              // schedule constraints
+              new->schedule_constraints = SCHEDULE_CONSTRAINT_DURATION;
+              new->day_duration = base->day_duration;
+
+              // prereqs
+              new->prereq_qty = 1;
+              new->prereqs[0] = base;
+
+              // mark
+              parse_text = TRUE;
+              display_selection_changed = TRUE;
+            }
+          }
+        } // end task create successor
          
       } // viewport display
 
