@@ -46,6 +46,7 @@ void tasks_init(Task_Memory* task_memory, User_Memory* user_memory){
   }
   task_memory->editor_visited = (uint8_t*) malloc(task_memory->allocation_total * sizeof(uint8_t));
   memset(task_memory->editor_visited, 0, task_memory->allocation_total);
+  task_memory->temp_status = (uint8_t*) malloc(task_memory->allocation_total * sizeof( *task_memory->temp_status));
   printf("Task init() complete for %ld tasks\n", task_memory->allocation_total);
 
   status_color_init();
@@ -68,6 +69,7 @@ void tasks_free(Task_Memory* task_memory, User_Memory* user_memory){
   hash_table_destroy(task_memory->hashtable);
   free(task_memory->tasks);
   free(task_memory->editor_visited);
+  free(task_memory->temp_status);
 
   hash_table_print(user_memory->hashtable);
   hash_table_destroy(user_memory->hashtable); 
@@ -86,6 +88,7 @@ void task_memory_management(Task_Memory* tm){
     tm->allocation_total *= 1.5;
     tm->tasks = (Task*) realloc(tm->tasks, tm->allocation_total * sizeof(Task));
     tm->editor_visited = (uint8_t*) realloc(tm->editor_visited, tm->allocation_total * sizeof(uint8_t));
+    tm->temp_status = (uint8_t*) realloc(tm->temp_status, tm->allocation_total * sizeof( *tm->temp_status));
 
     for (size_t i=task_allocation_old; i<tm->allocation_total; ++i){
       tm->tasks[i].trash = TRUE;
@@ -239,8 +242,22 @@ void task_dependents_find_all(Task_Memory* task_memory){
       }
     }
   }
+} 
+
+
+void task_name_generate(Task_Memory* task_memory, Task* base, char* result_name, int* result_length){
+  int i = 0;
+  Task* exists = NULL;
+  do {
+    ++i;
+    *result_length = sprintf(result_name, "%s%d", base->task_name, i);
+    exists = task_get(task_memory, result_name, *result_length);
+    if (i > 999){
+      printf("[ERROR] COULD NOT FIND A VALID NEW TASK NAME\n");
+      assert(0);
+    }
+  } while (exists != NULL);
 }
-        
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -1481,19 +1498,17 @@ int main(int argc, char* argv[]){
         } // end processing mouse click
 
         else if (keybind_display_select_prereq_one(evt) == TRUE){
-          assert(task_memory->allocation_total < 1024);
-          uint8_t selection_current[1024]; // TODO need to set this by task_memory->allocation_total
           for (size_t t=0; t<task_memory->allocation_total; ++t){
             if ((task_memory->tasks[t].trash == FALSE) && (task_memory->tasks[t].mode_edit == TRUE)){
-                selection_current[t] = TRUE;
+                task_memory->temp_status[t] = TRUE;
             }
             else{
-              selection_current[t] = FALSE;
+              task_memory->temp_status[t] = FALSE;
             }
           }
 
           for (size_t t=0; t<task_memory->allocation_total; ++t){
-            if (selection_current[t] == TRUE){
+            if (task_memory->temp_status[t] == TRUE){
               for (size_t i=0; i<task_memory->tasks[t].prereq_qty; ++i){
                 task_memory->tasks[t].prereqs[i]->mode_edit = TRUE;
               }
@@ -1502,19 +1517,17 @@ int main(int argc, char* argv[]){
           display_selection_changed = TRUE;
         }
         else if (keybind_display_select_dependent_one(evt) == TRUE){
-          assert(task_memory->allocation_total < 1024);
-          uint8_t selection_current[1024]; // TODO need to set this by task_memory->allocation_total
           for (size_t t=0; t<task_memory->allocation_total; ++t){
             if ((task_memory->tasks[t].trash == FALSE) && (task_memory->tasks[t].mode_edit == TRUE)){
-                selection_current[t] = TRUE;
+                task_memory->temp_status[t] = TRUE;
             }
             else{
-              selection_current[t] = FALSE;
+              task_memory->temp_status[t] = FALSE;
             }
           }
 
           for (size_t t=0; t<task_memory->allocation_total; ++t){
-            if (selection_current[t] == TRUE){
+            if (task_memory->temp_status[t] == TRUE){
               for (size_t i=0; i<task_memory->tasks[t].dependent_qty; ++i){
                 task_memory->tasks[t].dependents[i]->mode_edit = TRUE;
               }
@@ -1538,6 +1551,79 @@ int main(int argc, char* argv[]){
             }
           }
         }
+
+        else if (keybind_display_task_create_split(evt) == TRUE){
+          // record what is edit mode now
+          for (size_t t=0; t<task_memory->allocation_total; ++t){
+            if ((task_memory->tasks[t].trash == FALSE) && (task_memory->tasks[t].mode_edit == TRUE)){
+              task_memory->temp_status[t] = TRUE;
+            }
+            else{
+              task_memory->temp_status[t] = FALSE;
+            }
+          }
+
+          // now split each in edit mode!
+          for (size_t t=0; t<task_memory->allocation_total; ++t){
+            if (task_memory->temp_status[t] == TRUE){
+              // duplicate this task to split it
+              Task* base = task_memory->tasks+t;
+
+              // find a new name, create the new task
+              char* name_new = (char*) malloc(base->task_name_length + 4);
+              int name_new_length;
+              task_name_generate(task_memory, base, name_new, &name_new_length);
+              Task* new = task_create(task_memory, name_new, name_new_length);
+              free(name_new);
+
+              // copy properties! 
+              new->trash = FALSE;
+              new->mode_edit = TRUE;
+              new->schedule_done = FALSE;
+              new->status_color = base->status_color;
+              new->user_qty = base->user_qty;
+              for (size_t u=0; u<new->user_qty; ++u){
+                new->users[u] = base->users[u];
+              }
+
+              // figure out schedule constraints, start with duration
+              new->schedule_constraints = SCHEDULE_CONSTRAINT_DURATION;
+              new->day_duration = base->day_duration / 2;
+              if (new->day_duration <= 0){
+                new->day_duration = 1;
+              }
+              base->day_duration = new->day_duration;
+
+              // accomodate other schedule constraints
+              if ((base->schedule_constraints & SCHEDULE_CONSTRAINT_END) > 0){
+                printf("schedule constraints were: %lu ... %lu\n", base->schedule_constraints, new->schedule_constraints);
+                new->schedule_constraints |= SCHEDULE_CONSTRAINT_END;
+                new->day_end = base->day_end;
+
+                base->schedule_constraints ^= SCHEDULE_CONSTRAINT_END;
+                printf("schedule constraints now: %lu ... %lu\n", base->schedule_constraints, new->schedule_constraints);
+              }
+
+              // make the dependencies work as intended
+              new->prereq_qty = 1;
+              new->prereqs[0] = base;
+
+              // set dependents of the base to now depend on the new task instead
+              // just update prereqs now, later scrub will make the dependents update properly
+              for (size_t i=0; i<base->dependent_qty; ++i){
+                Task* child = base->dependents[i];
+                for (size_t j=0; j<child->prereq_qty; ++j){
+                  if (child->prereqs[j] == base){
+                    child->prereqs[j] = new;
+                    break; // ASSUME that prereqs are not duplicated.. only need one
+                  }
+                }
+              }
+              parse_text = TRUE;
+              display_selection_changed = TRUE;
+            }
+          } // end duplication of all tasks in edit mode
+        } // end task split 
          
       } // viewport display
 

@@ -93,6 +93,7 @@ typedef struct Task_Memory{
   size_t allocation_used;
   size_t last_created;
   uint8_t* editor_visited;
+  uint8_t* temp_status;
 } Task_Memory;
 
 
