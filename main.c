@@ -1481,21 +1481,51 @@ int main(int argc, char* argv[]){
         } // end processing mouse click
 
         else if (keybind_display_select_prereq_one(evt) == TRUE){
-          // TODO select all nested prerequisites of the given task
-          // TODO or just one..  need to make this a controllable thing!
+          assert(task_memory->allocation_total < 1024);
+          uint8_t selection_current[1024]; // TODO need to set this by task_memory->allocation_total
           for (size_t t=0; t<task_memory->allocation_total; ++t){
-            if (task_memory->tasks[t].trash == FALSE){
-              if (task_memory->tasks[t].mode_edit == TRUE){
-                for (size_t i=0; i<task_memory->tasks[t].prereq_qty; ++i){
-                  task_memory->tasks[t].prereqs[i]->mode_edit = TRUE;
-                }
+            if ((task_memory->tasks[t].trash == FALSE) && (task_memory->tasks[t].mode_edit == TRUE)){
+                selection_current[t] = TRUE;
+            }
+            else{
+              selection_current[t] = FALSE;
+            }
+          }
+
+          for (size_t t=0; t<task_memory->allocation_total; ++t){
+            if (selection_current[t] == TRUE){
+              for (size_t i=0; i<task_memory->tasks[t].prereq_qty; ++i){
+                task_memory->tasks[t].prereqs[i]->mode_edit = TRUE;
               }
             }
           }
           display_selection_changed = TRUE;
         }
+        else if (keybind_display_select_dependent_one(evt) == TRUE){
+          assert(task_memory->allocation_total < 1024);
+          uint8_t selection_current[1024]; // TODO need to set this by task_memory->allocation_total
+          for (size_t t=0; t<task_memory->allocation_total; ++t){
+            if ((task_memory->tasks[t].trash == FALSE) && (task_memory->tasks[t].mode_edit == TRUE)){
+                selection_current[t] = TRUE;
+            }
+            else{
+              selection_current[t] = FALSE;
+            }
+          }
 
+          for (size_t t=0; t<task_memory->allocation_total; ++t){
+            if (selection_current[t] == TRUE){
+              for (size_t i=0; i<task_memory->tasks[t].dependent_qty; ++i){
+                task_memory->tasks[t].dependents[i]->mode_edit = TRUE;
+              }
+            }
+          }
+          display_selection_changed = TRUE;
+        }
         else if (keybind_display_select_prereq_all(evt) == TRUE){
+          assert(0); // TODO implement
+        }
+        else if (keybind_display_select_dependent_all(evt) == TRUE){
           assert(0); // TODO implement
         }
 
@@ -1508,7 +1538,6 @@ int main(int argc, char* argv[]){
             }
           }
         }
-
          
       } // viewport display
 

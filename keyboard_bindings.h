@@ -68,7 +68,7 @@ uint8_t keybind_display_camera_time_scroll_down(SDL_Event evt){
 
 
 uint8_t keybind_display_select_prereq_one(SDL_Event evt){
-  if (evt.key.keysym.sym == SDLK_w){ 
+  if (evt.key.keysym.sym == SDLK_w && evt.type == SDL_KEYDOWN){ 
     return TRUE;
   }
   return FALSE;
@@ -76,6 +76,20 @@ uint8_t keybind_display_select_prereq_one(SDL_Event evt){
 
 uint8_t keybind_display_select_prereq_all(SDL_Event evt){
   if (evt.key.keysym.sym == SDLK_w && SDL_GetModState() & KMOD_SHIFT){ 
+    return TRUE;
+  }
+  return FALSE;
+}
+
+uint8_t keybind_display_select_dependent_one(SDL_Event evt){
+  if (evt.key.keysym.sym == SDLK_s && evt.type == SDL_KEYDOWN){
+    return TRUE;
+  }
+  return FALSE;
+}
+
+uint8_t keybind_display_select_dependent_all(SDL_Event evt){
+  if (evt.key.keysym.sym == SDLK_s && SDL_GetModState() & KMOD_SHIFT){ 
     return TRUE;
   }
   return FALSE;
