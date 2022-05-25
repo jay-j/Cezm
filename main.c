@@ -172,7 +172,7 @@ void task_user_add(Task* task, User* user){
 void task_user_remove(Task* task, User* user){
   size_t id = 0;
   uint8_t found = 0;
-  for(size_t i=0; i<task->user_qty; ++i){
+  for(size_t i=0; i<task->user_qty; ++i){ // TODO don't re-do the search.. we have the offset
     if (task->users[i] == user){
       id = i;
       found = 1;
@@ -182,7 +182,6 @@ void task_user_remove(Task* task, User* user){
 
   // only continue with removal process if you can find the user
   if (found == 1){
-    printf("need to remove user %s from task %s. userid in that task is %ld\n", user->name, task->task_name, id);
     
     // now shuffle down all the remaining users, update the qty
     for (size_t i=id; i<task->user_qty-1; ++i){
@@ -214,11 +213,13 @@ void task_user_remove(Task* task, User* user){
 
 
 void task_user_remove_unvisited(Task* task, User_Memory* user_memory){
-  for (size_t u=0; u<task->user_qty; ++u){
-    User* user = task->users[u];
-    size_t uindex = user - user_memory->users;
-    if (user_memory->editor_visited[uindex] == FALSE){
-      task_user_remove(task, user);
+  if (task->user_qty > 0){
+    for (size_t u=task->user_qty; u>0; u--){
+      User* user = task->users[u-1];
+      size_t uindex = user - user_memory->users;
+      if (user_memory->editor_visited[uindex] == FALSE){
+        task_user_remove(task, user);
+      }
     }
   }
 }
@@ -362,10 +363,10 @@ void editor_tasks_cleanup(Task_Memory* task_memory){
 }
 
 
+// scrub through users, remove any that have zero assigned tasks (user->task_qty = 0)
 void editor_users_cleanup(User_Memory* user_memory){
   User* users = user_memory->users;
 
-  // scrub through users, remove any that don't have any more assigned tasks at all
   for (size_t i=0; i<user_memory->allocation_total; ++i){
     if(users[i].trash == FALSE){
       if (users[i].task_qty == 0){
@@ -538,7 +539,7 @@ void editor_parse_propertyline(Task_Memory* task_memory, User_Memory* user_memor
           user = user_create(user_memory, value, value_length); 
         }
         else{
-          printf("user: '%.*s'\n", value_length, value);
+          printf("user: '%.*s' EXISTING\n", value_length, value);
         }
         user->trash = FALSE;
         user->mode_edit = TRUE;
