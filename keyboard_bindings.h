@@ -28,6 +28,12 @@ uint8_t keybind_viewport_mode_toggle(SDL_Event evt){
 
 //// editor mode keybindings ////
 
+uint8_t keybind_editor_symbol_rename(SDL_Event evt){
+  if (evt.key.keysym.sym == SDLK_F2){
+    return TRUE;
+  }
+  return FALSE;
+}
 
 //// display mode keybindings ////
 
