@@ -175,6 +175,8 @@ typedef struct TextCursor{
   int pos;
   int x;
   int y;
+  uint8_t entity_type;
+  void* entity;
 } TextCursor;
 
 enum TEXTCURSOR_MOVE_DIR {
@@ -186,6 +188,12 @@ enum TEXTCURSOR_MOVE_DIR {
   TEXTCURSOR_MOVE_LINE_START
 };
 
+enum TEXTCURSOR_ENTITY_TYPE {
+  TEXTCURSOR_ENTITY_NONE,
+  TEXTCURSOR_ENTITY_TASK,
+  TEXTCURSOR_ENTITY_PREREQ,
+  TEXTCURSOR_ENTITY_USER
+};
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 

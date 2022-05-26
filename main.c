@@ -614,7 +614,7 @@ void editor_parse_propertyline(Task_Memory* task_memory, User_Memory* user_memor
 // in edit mode, lock the Activity_Node ids that are being shown in the edit pane.
 // modify the full network directly. automatically delete/re-add everything being edited in edit mode. assume all those nodes selected are trashed and revised. 
 // how to balance reparsing everything at 100Hz and only reparsing what is needed? maybe use the cursor to direct efforts? only reparse from scratch the node the cursor is in
-void editor_parse_text(Task_Memory* task_memory, User_Memory* user_memory, char* text_start, size_t text_length){
+void editor_parse_text(Task_Memory* task_memory, User_Memory* user_memory, char* text_start, size_t text_length, TextCursor* text_cursor){
   char* text_end = text_start + text_length;
   Task* tasks = task_memory->tasks;
 
@@ -632,6 +632,8 @@ void editor_parse_text(Task_Memory* task_memory, User_Memory* user_memory, char*
       //tasks[i].user_qty = 0;
     }
   }
+  text_cursor->entity_type = TEXTCURSOR_ENTITY_NONE;
+  text_cursor->entity = NULL;
 
   // PASS 1 - just add/remove tasks, mark them as visited. new tasks are marked edit_mode = TRUE
   editor_parse_task_detect(task_memory, text_start, text_length);
@@ -679,6 +681,12 @@ void editor_parse_text(Task_Memory* task_memory, User_Memory* user_memory, char*
       if (task_name_length > 0){
         task = task_get(task_memory, task_name, task_name_length);
         assert( task != NULL);
+      }
+
+      if ((text_cursor->pos > line_start - text_start) && (text_cursor->pos < line_end - text_start)){
+        printf("cursor on line creating task '%s'\n", task->task_name);
+        text_cursor->entity_type = TEXTCURSOR_ENTITY_TASK;
+        text_cursor->entity = (void*) task;
       }
     }
 
@@ -1010,7 +1018,7 @@ void editor_cursor_move(TextBuffer* tb, TextCursor* tc, int movedir){
 }
 
 // throw out everything, load from a file and parse it
-void editor_load_text(Task_Memory* task_memory, User_Memory* user_memory, TextBuffer* text_buffer, const char* filename){
+void editor_load_text(Task_Memory* task_memory, User_Memory* user_memory, TextBuffer* text_buffer, const char* filename, TextCursor* text_cursor){
 
   // open the file, create if not exist, use persmissions of current user
   FILE* fd = fopen(filename, "r"); 
@@ -1042,7 +1050,7 @@ void editor_load_text(Task_Memory* task_memory, User_Memory* user_memory, TextBu
   for (size_t t=0; t<task_memory->allocation_total; ++t){
     task_memory->tasks[t].mode_edit = TRUE;
   }
-  editor_parse_text(task_memory, user_memory, text_buffer->text, text_buffer->length);
+  editor_parse_text(task_memory, user_memory, text_buffer->text, text_buffer->length, text_cursor);
   editor_find_line_lengths(text_buffer);
 }
 
@@ -1161,6 +1169,35 @@ void text_buffer_save(TextBuffer* text_buffer, char* filename){
   }
 }
 
+
+void editor_symbol_rename(Task_Memory* task_memory, User_Memory* user_memory, TextBuffer* text_buffer, TextCursor* text_cursor){
+  printf("[SYMBOL RENAME] FUNCTION ACTIVATED\n");
+
+  // parse just the line under the cursor
+  char* line_start = text_buffer->text + text_cursor->pos - text_cursor->x;
+  int line_length = text_buffer->line_length[text_cursor->y];
+  printf("line at cursor is '%.*s'\n", line_length, line_start);
+
+  // detect what kind of symbol is there
+  // TODO this kind of parsing is matching the editor text stuff....
+  if (memchr(line_start, (int) '{', line_length) != NULL){
+    printf("  dealing with a task\n");
+  }
+  else if (memchr(line_start, (int) ':', line_length) != NULL){
+    printf("  dealing with a property..\n");
+
+  }
+  // detect if the cursor is over an editable part of the field TODO is there a way to have this be part of text parsing?
+  
+
+  // if renaming task...
+  // or prereq? are these the same?
+
+  // if renaming user...
+
+
+}
+
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 
@@ -1197,11 +1234,6 @@ int main(int argc, char* argv[]){
   Schedule_Event_List* schedule_working = schedule_create();
   int schedule_solve_status = FAILURE;
 
-  TextBuffer* text_buffer = editor_buffer_init();
-  editor_load_text(task_memory, user_memory, text_buffer, argv[1]); 
-  schedule_solve_status = schedule_solve(task_memory, schedule_best, schedule_working);
-  uint64_t day_project_start = schedule_best->day_start;
-
   // TODO smooth scroll system
   // TODO error flagging / colors system; live syntax parsing
   TextBox editor_textbox;
@@ -1215,6 +1247,11 @@ int main(int argc, char* argv[]){
   TextBox name_textbox;
   name_textbox.color.r = 0; name_textbox.color.g = 0; name_textbox.color.b = 0; name_textbox.color.a = 0xFF;
   name_textbox.texture = NULL;
+
+  TextBuffer* text_buffer = editor_buffer_init();
+  editor_load_text(task_memory, user_memory, text_buffer, argv[1], text_cursor); 
+  schedule_solve_status = schedule_solve(task_memory, schedule_best, schedule_working);
+  uint64_t day_project_start = schedule_best->day_start;
 
   // causes some overhead. can control with SDL_StopTextInput()
   SDL_StartTextInput();
@@ -1301,7 +1338,7 @@ int main(int argc, char* argv[]){
           }
         }
         // load file contents into the editor text buffer, this will also parse the file
-        editor_load_text(task_memory, user_memory, text_buffer, argv[1]);
+        editor_load_text(task_memory, user_memory, text_buffer, argv[1], text_cursor);
         parse_text = TRUE; // because load doesn't try a schedule solve
         render_text = 1;
 
@@ -1405,6 +1442,10 @@ int main(int argc, char* argv[]){
           }
           else if (evt.key.keysym.sym == SDLK_END){
             editor_cursor_move(text_buffer, text_cursor, TEXTCURSOR_MOVE_LINE_END);
+          }
+          else if (keybind_editor_symbol_rename(evt) == TRUE){
+            editor_symbol_rename(task_memory, user_memory, text_buffer, text_cursor);
+            parse_text = TRUE;
           }
           // F2 - rename symbol in edit mode
           // SHIFT+F2 - rename symbol even if not in edit mode
@@ -1706,7 +1747,7 @@ int main(int argc, char* argv[]){
       printf("[STATUS] TEXT PARSING REQUESTED--------------------------------------\n");
 
       // extract property changes from the text
-      editor_parse_text(task_memory, user_memory, text_buffer->text, text_buffer->length);
+      editor_parse_text(task_memory, user_memory, text_buffer->text, text_buffer->length, text_cursor);
 
       // PERFORM SCHEDULING!
       schedule_solve_status = schedule_solve(task_memory, schedule_best, schedule_working);
