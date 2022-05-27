@@ -500,7 +500,7 @@ char* text_append_date(char* text_output, uint64_t day){
 
 
 // comma to separate values in a list
-void editor_parse_propertyline(Task_Memory* task_memory, User_Memory* user_memory, Task* task, char* line_start, int line_working_length){
+void editor_parse_propertyline(Task_Memory* task_memory, User_Memory* user_memory, Task* task, char* line_start, int line_working_length, TextBuffer* text_buffer, TextCursor* text_cursor){
   char* line_end = line_start + line_working_length;
   // split into property and value parts. split on ':'
   char* split = memchr(line_start, (int) ':', line_working_length);
@@ -547,6 +547,13 @@ void editor_parse_propertyline(Task_Memory* task_memory, User_Memory* user_memor
 
         // assign to the task, if it is not already there
         task_user_add(task, user);
+
+        // mark in cursor
+        if ((text_cursor->pos >= property_split_start - text_buffer->text) && (text_cursor->pos <= property_split_end - text_buffer->text)){
+          text_cursor->entity_type = TEXTCURSOR_ENTITY_USER;
+          text_cursor->entity = (void*) user;
+          printf("  [CURSOR DETECT] says cursor on user '%s'\n", user->name);
+        }
       }
 
       property_split_start = property_split_end + 1;
@@ -572,6 +579,13 @@ void editor_parse_propertyline(Task_Memory* task_memory, User_Memory* user_memor
         if (prereq != NULL){
           task->prereqs[task->prereq_qty] = prereq;
           task->prereq_qty += 1;
+
+          // mark in cursor
+          if ((text_cursor->pos >= property_split_start - text_buffer->text) && (text_cursor->pos <= property_split_end - text_buffer->text)){
+            text_cursor->entity_type = TEXTCURSOR_ENTITY_PREREQ;
+            text_cursor->entity = (void*) prereq;
+            printf("  [CURSOR DETECT] says cursor on prereq '%s'\n", prereq->task_name);
+          }
         }
         else{
           // TODO something when dependencies don't exist
@@ -614,7 +628,9 @@ void editor_parse_propertyline(Task_Memory* task_memory, User_Memory* user_memor
 // in edit mode, lock the Activity_Node ids that are being shown in the edit pane.
 // modify the full network directly. automatically delete/re-add everything being edited in edit mode. assume all those nodes selected are trashed and revised. 
 // how to balance reparsing everything at 100Hz and only reparsing what is needed? maybe use the cursor to direct efforts? only reparse from scratch the node the cursor is in
-void editor_parse_text(Task_Memory* task_memory, User_Memory* user_memory, char* text_start, size_t text_length, TextCursor* text_cursor){
+void editor_parse_text(Task_Memory* task_memory, User_Memory* user_memory, TextBuffer* text_buffer, TextCursor* text_cursor){
+  char* text_start = text_buffer->text;
+  size_t text_length = text_buffer->length;
   char* text_end = text_start + text_length;
   Task* tasks = task_memory->tasks;
 
@@ -701,7 +717,7 @@ void editor_parse_text(Task_Memory* task_memory, User_Memory* user_memory, char*
 
     // property line
     else if(memchr(line_start, (int) ':', line_working_length) != NULL){
-      editor_parse_propertyline(task_memory, user_memory, task, line_start, line_working_length);
+      editor_parse_propertyline(task_memory, user_memory, task, line_start, line_working_length, text_buffer, text_cursor);
     }
 
     // advance to the next line
@@ -1050,7 +1066,7 @@ void editor_load_text(Task_Memory* task_memory, User_Memory* user_memory, TextBu
   for (size_t t=0; t<task_memory->allocation_total; ++t){
     task_memory->tasks[t].mode_edit = TRUE;
   }
-  editor_parse_text(task_memory, user_memory, text_buffer->text, text_buffer->length, text_cursor);
+  editor_parse_text(task_memory, user_memory, text_buffer, text_cursor);
   editor_find_line_lengths(text_buffer);
 }
 
@@ -1171,30 +1187,66 @@ void text_buffer_save(TextBuffer* text_buffer, char* filename){
 
 
 void editor_symbol_rename(Task_Memory* task_memory, User_Memory* user_memory, TextBuffer* text_buffer, TextCursor* text_cursor){
-  printf("[SYMBOL RENAME] FUNCTION ACTIVATED\n");
-
-  // parse just the line under the cursor
-  char* line_start = text_buffer->text + text_cursor->pos - text_cursor->x;
-  int line_length = text_buffer->line_length[text_cursor->y];
-  printf("line at cursor is '%.*s'\n", line_length, line_start);
-
-  // detect what kind of symbol is there
-  // TODO this kind of parsing is matching the editor text stuff....
-  if (memchr(line_start, (int) '{', line_length) != NULL){
-    printf("  dealing with a task\n");
-  }
-  else if (memchr(line_start, (int) ':', line_length) != NULL){
-    printf("  dealing with a property..\n");
-
-  }
-  // detect if the cursor is over an editable part of the field TODO is there a way to have this be part of text parsing?
-  
+  printf("[SYMBOL RENAME] FUNCTION ACTIVATED**********************************\n");
+ 
+  // force parsing of the text to update the cursor stuff
+  editor_parse_text(task_memory, user_memory, text_buffer, text_cursor);
 
   // if renaming task...
+  if (text_cursor->entity_type == TEXTCURSOR_ENTITY_TASK){
+    printf("renaming task!\n");
+    // TODO some kind of renaming text input UI! :(
+    Task* old = (Task*) text_cursor->entity;
+    assert(old != NULL);
+
+    char name_new[24];
+    size_t name_new_length = 11;
+    memcpy(name_new, "RENAME_TASK", name_new_length);
+
+    // TODO check to make sure are not going to create a task conflict
+    Task* new = task_create(task_memory, name_new, name_new_length);
+
+    // copy properties from old to new
+    new->trash = FALSE;
+    new->mode_edit = TRUE;
+    new->schedule_done = FALSE;
+    new->status_color = old->status_color;
+    new->user_qty = old->user_qty;
+    for (size_t u=0; u<new->user_qty; ++u){
+      new->users[u] = old->users[u];
+    }
+
+    // schedule constraints
+    new->schedule_constraints = old->schedule_constraints; 
+    new->day_duration = old->day_duration;
+    new->day_start = old->day_start;
+    new->day_end = old->day_end;
+
+    // prereqs
+    new->prereq_qty = old->prereq_qty;
+    for (size_t i=0; i<old->prereq_qty; ++i){
+      new->prereqs[i] = old->prereqs[i];
+    }
+
+    // change prereqs to reference new instead of old
+    for (size_t t=0; t<task_memory->allocation_total; ++t){
+      Task* task = task_memory->tasks+t;
+      for (size_t i=0; i<task->prereq_qty; ++i){
+        if (task->prereqs[i] == old){
+          task->prereqs[i] = new;
+        }
+      }
+    }
+
+    // mark end for the old task
+    old->trash = TRUE;
+  }
+
   // or prereq? are these the same?
 
   // if renaming user...
 
+  // TODO regenerate the text
 
 }
 
@@ -1747,7 +1799,7 @@ int main(int argc, char* argv[]){
       printf("[STATUS] TEXT PARSING REQUESTED--------------------------------------\n");
 
       // extract property changes from the text
-      editor_parse_text(task_memory, user_memory, text_buffer->text, text_buffer->length, text_cursor);
+      editor_parse_text(task_memory, user_memory, text_buffer, text_cursor);
 
       // PERFORM SCHEDULING!
       schedule_solve_status = schedule_solve(task_memory, schedule_best, schedule_working);
