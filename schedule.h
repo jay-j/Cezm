@@ -497,6 +497,8 @@ void schedule_solve_iter(Task_Memory* task_memory, Schedule_Event_List* schedule
 
 // scheduling algorithm built around having at least one fixed start/end task per task island
 int schedule_solve(Task_Memory* task_memory, Schedule_Event_List* schedule_best, Schedule_Event_List* schedule_working){
+  uint64_t cpu_timer_start = SDL_GetPerformanceCounter();
+
   Task* tasks = task_memory->tasks;
   // reset previous search efforts
   schedule_best->qty = 0;
@@ -539,15 +541,18 @@ int schedule_solve(Task_Memory* task_memory, Schedule_Event_List* schedule_best,
 
   //printf("final best schedule: \n");
 
+  uint64_t cpu_timer_end = SDL_GetPerformanceCounter();
+  double cpu_timer_elapsed = ((double) cpu_timer_end - cpu_timer_start) / ((double) SDL_GetPerformanceFrequency());
+
   if (schedule_best->solved == TRUE){
     for(size_t e=0; e<schedule_best->qty; ++e){
       schedule_best->events[e].task->day_start = schedule_best->events[e].date;
     }
-    printf("[SCHEDULER] schedule solve done, SUCCESS.\n");
+    printf("[SCHEDULER] schedule solve done: SUCCESS. time: %.3lf ms\n", cpu_timer_elapsed*1000);
     return SUCCESS;
   }
   else{
-    printf("[SCHEDULER] schedule solve done, FAILURE.\n");
+    printf("[SCHEDULER] schedule solve done: FAILURE. time: %.3lf ms\n", cpu_timer_elapsed*1000);
     return FAILURE;
   }
 

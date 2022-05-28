@@ -629,6 +629,8 @@ void editor_parse_propertyline(Task_Memory* task_memory, User_Memory* user_memor
 // modify the full network directly. automatically delete/re-add everything being edited in edit mode. assume all those nodes selected are trashed and revised. 
 // how to balance reparsing everything at 100Hz and only reparsing what is needed? maybe use the cursor to direct efforts? only reparse from scratch the node the cursor is in
 void editor_parse_text(Task_Memory* task_memory, User_Memory* user_memory, TextBuffer* text_buffer, TextCursor* text_cursor){
+  uint64_t cpu_timer_start = SDL_GetPerformanceCounter();
+
   char* text_start = text_buffer->text;
   size_t text_length = text_buffer->length;
   char* text_end = text_start + text_length;
@@ -739,7 +741,9 @@ void editor_parse_text(Task_Memory* task_memory, User_Memory* user_memory, TextB
 
   task_dependents_find_all(task_memory);
 
-  printf("[STATUS] Finished parsing text this round\n");
+  uint64_t cpu_timer_end = SDL_GetPerformanceCounter();
+  double cpu_timer_elapsed = ((double) cpu_timer_end - cpu_timer_start) / ((double) SDL_GetPerformanceFrequency());
+  printf("[STATUS] Finished parsing text this round, time: %.3lf ms\n", cpu_timer_elapsed*1000);
 
   // TODO add better error handling warning stuff
 }
