@@ -1196,6 +1196,8 @@ void editor_symbol_rename(Task_Memory* task_memory, User_Memory* user_memory, Te
   if (text_cursor->entity_type == TEXTCURSOR_ENTITY_TASK){
     printf("renaming task!\n");
     // TODO some kind of renaming text input UI! :(
+    // TODO a new viewport that appears as a header to the editor viewport?
+    // need to parse-as-you-type and update live?
     Task* old = (Task*) text_cursor->entity;
     assert(old != NULL);
 
@@ -1498,6 +1500,7 @@ int main(int argc, char* argv[]){
           else if (keybind_editor_symbol_rename(evt) == TRUE){
             editor_symbol_rename(task_memory, user_memory, text_buffer, text_cursor);
             parse_text = TRUE;
+            display_selection_changed = TRUE;
           }
           // F2 - rename symbol in edit mode
           // SHIFT+F2 - rename symbol even if not in edit mode
