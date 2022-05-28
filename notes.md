@@ -142,3 +142,7 @@ time_t apple = mktime(timeinfo);
 
 Note that the structure `struct tm` uses years *since 1900* and months *since January* (January = 0).
 
+# User Experience
+When building an initial schedule.
+- Make one task and the next and the next... a known chain of events associated with the same user and prerequisites / dependencies. So need a 'follow on task' keyboard shortcut. Something acccessible from edit mode? would need to know which task was being edited.. start with 
+- And split. so I can go back and divide tasks into pieces.
