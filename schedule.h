@@ -171,13 +171,14 @@ typedef struct TextBuffer{
   int lines;
 } TextBuffer;
 
-typedef struct TextCursor{
-  int pos;
-  int x;
-  int y;
+typedef struct Text_Cursor{
+  size_t qty;
+  int* pos;
+  int* x;
+  int* y;
   uint8_t entity_type;
   void* entity;
-} TextCursor;
+} Text_Cursor;
 
 enum TEXTCURSOR_MOVE_DIR {
   TEXTCURSOR_MOVE_DIR_RIGHT,
@@ -194,6 +195,8 @@ enum TEXTCURSOR_ENTITY_TYPE {
   TEXTCURSOR_ENTITY_PREREQ,
   TEXTCURSOR_ENTITY_USER
 };
+
+#define CURSOR_QTY_MAX 512
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 

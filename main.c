@@ -7,7 +7,6 @@
 #include <assert.h>
 #include <time.h>
 #include <ctype.h> // for isalnum()
-
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_image.h>
 #include <SDL2/SDL_ttf.h>
@@ -22,8 +21,11 @@
 #define FONTSIZE 16
 
 // modal switching
-#define VIEWPORT_EDITOR 0
-#define VIEWPORT_DISPLAY 1
+enum VIEWPORT_TYPES {
+  VIEWPORT_EDITOR,
+  VIEWPORT_DISPLAY,
+  VIEWPORT_RENAME
+};
 
 // viewport-editor related
 #define LINE_MAX_LENGTH 512
@@ -509,7 +511,7 @@ char* text_append_date(char* text_output, uint64_t day){
 
 
 // comma to separate values in a list
-void editor_parse_propertyline(Task_Memory* task_memory, User_Memory* user_memory, Task* task, char* line_start, int line_working_length, TextBuffer* text_buffer, TextCursor* text_cursor){
+void editor_parse_propertyline(Task_Memory* task_memory, User_Memory* user_memory, Task* task, char* line_start, int line_working_length, TextBuffer* text_buffer, Text_Cursor* text_cursor){
   char* line_end = line_start + line_working_length;
   // split into property and value parts. split on ':'
   char* split = memchr(line_start, (int) ':', line_working_length);
@@ -557,8 +559,8 @@ void editor_parse_propertyline(Task_Memory* task_memory, User_Memory* user_memor
         // assign to the task, if it is not already there
         task_user_add(task, user);
 
-        // mark in cursor
-        if ((text_cursor->pos >= property_split_start - text_buffer->text) && (text_cursor->pos <= property_split_end - text_buffer->text)){
+        // mark in cursor TODO MULTICURSOR
+        if ((text_cursor->pos[0] >= property_split_start - text_buffer->text) && (text_cursor->pos[0] <= property_split_end - text_buffer->text)){
           text_cursor->entity_type = TEXTCURSOR_ENTITY_USER;
           text_cursor->entity = (void*) user;
           printf("  [CURSOR DETECT] says cursor on user '%s'\n", user->name);
@@ -589,8 +591,8 @@ void editor_parse_propertyline(Task_Memory* task_memory, User_Memory* user_memor
           task->prereqs[task->prereq_qty] = prereq;
           task->prereq_qty += 1;
 
-          // mark in cursor
-          if ((text_cursor->pos >= property_split_start - text_buffer->text) && (text_cursor->pos <= property_split_end - text_buffer->text)){
+          // mark in cursor TODO MULTICURSOR
+          if ((text_cursor->pos[0] >= property_split_start - text_buffer->text) && (text_cursor->pos[0] <= property_split_end - text_buffer->text)){
             text_cursor->entity_type = TEXTCURSOR_ENTITY_PREREQ;
             text_cursor->entity = (void*) prereq;
             printf("  [CURSOR DETECT] says cursor on prereq '%s'\n", prereq->task_name);
@@ -637,7 +639,7 @@ void editor_parse_propertyline(Task_Memory* task_memory, User_Memory* user_memor
 // in edit mode, lock the Activity_Node ids that are being shown in the edit pane.
 // modify the full network directly. automatically delete/re-add everything being edited in edit mode. assume all those nodes selected are trashed and revised. 
 // how to balance reparsing everything at 100Hz and only reparsing what is needed? maybe use the cursor to direct efforts? only reparse from scratch the node the cursor is in
-void editor_parse_text(Task_Memory* task_memory, User_Memory* user_memory, TextBuffer* text_buffer, TextCursor* text_cursor){
+void editor_parse_text(Task_Memory* task_memory, User_Memory* user_memory, TextBuffer* text_buffer, Text_Cursor* text_cursor){
   uint64_t cpu_timer_start = SDL_GetPerformanceCounter();
 
   char* text_start = text_buffer->text;
@@ -710,7 +712,8 @@ void editor_parse_text(Task_Memory* task_memory, User_Memory* user_memory, TextB
         assert( task != NULL);
       }
 
-      if ((text_cursor->pos > line_start - text_start) && (text_cursor->pos < line_end - text_start)){
+      // TODO MULTICURSOR
+      if ((text_cursor->pos[0] > line_start - text_start) && (text_cursor->pos[0] < line_end - text_start)){
         printf("cursor on line creating task '%s'\n", task->task_name);
         text_cursor->entity_type = TEXTCURSOR_ENTITY_TASK;
         text_cursor->entity = (void*) task;
@@ -972,82 +975,115 @@ void editor_find_line_lengths(TextBuffer* tb){
   }
 }
 
+editor_cursor_reset(Text_Cursor* text_cursor){
+  text_cursor->pos[0] = 0;
+  text_cursor->x[0] = 0;
+  text_cursor->y[0] = 0;
+  text_cursor->qty = 1;
+}
 
-void editor_cursor_move(TextBuffer* tb, TextCursor* tc, int movedir){
+
+Text_Cursor* editor_cursor_create(){
+  Text_Cursor* text_cursor = (Text_Cursor*) malloc(sizeof(Text_Cursor));
+  text_cursor->pos = malloc(CURSOR_QTY_MAX * sizeof(*text_cursor->pos));
+  text_cursor->x   = malloc(CURSOR_QTY_MAX * sizeof(*text_cursor->x));
+  text_cursor->y   = malloc(CURSOR_QTY_MAX * sizeof(*text_cursor->y));
+  editor_cursor_reset(text_cursor);
+
+  return text_cursor;
+}
+
+
+void editor_cursor_destroy(Text_Cursor* text_cursor){
+  free(text_cursor->pos);
+  free(text_cursor->x);
+  free(text_cursor->y);
+  free(text_cursor->entity);
+  free(text_cursor);
+}
+
+
+// sort the multi-cursors back to front for text editing with the easiest manipulations TODO
+void editor_cursor_sort(Text_Cursor* text_cursor){
+
+
+}
+
+
+// move one cursor by the given amount
+void editor_cursor_move(TextBuffer* tb, Text_Cursor* tc, size_t index, int movedir){
   if (movedir == TEXTCURSOR_MOVE_DIR_RIGHT){
-    if (tc->pos < tb->length){
+    if (tc->pos[index] < tb->length){
       // TODO if allowed by length
-      tc->pos += 1;
-      tc->x += 1;
+      tc->pos[index] += 1;
+      tc->x[index] += 1;
       
       // wrap to next line
-      if (tc->x == tb->line_length[tc->y]){
-        tc->x = 0;
-        tc->y += 1;
+      if (tc->x[index] == tb->line_length[tc->y[index]]){
+        tc->x[index] = 0;
+        tc->y[index] += 1;
       }
     }
   }
   else if (movedir == TEXTCURSOR_MOVE_DIR_LEFT){
-    if (tc->pos > 0){
-      tc->pos -= 1;
-      tc->x -= 1;
+    if (tc->pos[index] > 0){
+      tc->pos[index] -= 1;
+      tc->x[index] -= 1;
 
       // wrap to previous line
-      if(tc->x  < 0){
-        tc->y -= 1;
-        tc->x = tb->line_length[tc->y] - 1;
+      if(tc->x[index]  < 0){
+        tc->y[index] -= 1;
+        tc->x[index] = tb->line_length[tc->y[index]] - 1;
       }
     }
   }
   else if (movedir == TEXTCURSOR_MOVE_DIR_UP){
-    if (tc->y > 0){
-      tc->y -= 1;
+    if (tc->y[index] > 0){
+      tc->y[index] -= 1;
 
-      int x_delta = tc->x;
+      int x_delta = tc->x[index];
       // moving on to a shorter line
-      if (tc->x > tb->line_length[tc->y]){
-        tc->x = tb->line_length[tc->y]-1;
-        tc->pos -= x_delta + 1;
+      if (tc->x[index] > tb->line_length[tc->y[index]]){
+        tc->x[index] = tb->line_length[tc->y[index]]-1;
+        tc->pos[index] -= x_delta + 1;
       }
       // moving onto a longer line
       else{
-        x_delta += tb->line_length[tc->y] - tc->x;
-        tc->pos -= x_delta;
+        x_delta += tb->line_length[tc->y[index]] - tc->x[index];
+        tc->pos[index] -= x_delta;
       }
     }
   }
   else if (movedir == TEXTCURSOR_MOVE_DIR_DOWN){
-    if (tc->y < tb->lines){
-      int x_delta = tb->line_length[tc->y] - tc->x;
-      tc->y += 1;
+    if (tc->y[index] < tb->lines){
+      int x_delta = tb->line_length[tc->y[index]] - tc->x[index];
+      tc->y[index] += 1;
 
       // moving onto a shorter line
-      if (tc->x > tb->line_length[tc->y]){
-        tc->x = tb->line_length[tc->y]-1;
+      if (tc->x[index] > tb->line_length[tc->y[index]]){
+        tc->x[index] = tb->line_length[tc->y[index]]-1;
       }
         
-      tc->pos += x_delta + tc->x;
+      tc->pos[index] += x_delta + tc->x[index];
     }
   }
   else if (movedir == TEXTCURSOR_MOVE_LINE_START){
-    tc->pos -= tc->x;
-    tc->x = 0;
+    tc->pos[index] -= tc->x[index];
+    tc->x[index] = 0;
   }
   else if (movedir == TEXTCURSOR_MOVE_LINE_END){
-    int x_delta = tb->line_length[tc->y] - tc->x - 1;
+    int x_delta = tb->line_length[tc->y[index]] - tc->x[index] - 1;
     if (x_delta > 0){
-      tc->pos += x_delta;
-      tc->x += x_delta;
+      tc->pos[index] += x_delta;
+      tc->x[index] += x_delta;
     }
   }
 
-
-  printf("move(%d): %d = (%d, %d)\n", movedir, tc->pos, tc->x, tc->y);
-
+printf("move index %lu in direction %d\n", index, movedir);
 }
 
 // throw out everything, load from a file and parse it
-void editor_load_text(Task_Memory* task_memory, User_Memory* user_memory, TextBuffer* text_buffer, const char* filename, TextCursor* text_cursor){
+void editor_load_text(Task_Memory* task_memory, User_Memory* user_memory, TextBuffer* text_buffer, const char* filename, Text_Cursor* text_cursor){
 
   // open the file, create if not exist, use persmissions of current user
   FILE* fd = fopen(filename, "r"); 
@@ -1199,7 +1235,7 @@ void text_buffer_save(TextBuffer* text_buffer, char* filename){
 }
 
 
-void editor_symbol_rename(Task_Memory* task_memory, User_Memory* user_memory, TextBuffer* text_buffer, TextCursor* text_cursor){
+void editor_symbol_rename(Task_Memory* task_memory, User_Memory* user_memory, TextBuffer* text_buffer, Text_Cursor* text_cursor){
   printf("[SYMBOL RENAME] FUNCTION ACTIVATED**********************************\n");
  
   // force parsing of the text to update the cursor stuff
@@ -1306,10 +1342,7 @@ int main(int argc, char* argv[]){
   TextBox editor_textbox;
   editor_textbox.color.r = 0; editor_textbox.color.g = 0; editor_textbox.color.b = 0; editor_textbox.color.a = 0xFF;
   editor_textbox.texture = NULL;
-  TextCursor* text_cursor = (TextCursor*) malloc(sizeof(TextCursor));
-  text_cursor->pos = 0;
-  text_cursor->x  = 0;
-  text_cursor->y = 0;
+  Text_Cursor* text_cursor = editor_cursor_create();
 
   TextBox name_textbox;
   name_textbox.color.r = 0; name_textbox.color.g = 0; name_textbox.color.b = 0; name_textbox.color.a = 0xFF;
@@ -1410,17 +1443,13 @@ int main(int argc, char* argv[]){
         render_text = 1;
 
         viewport_active = VIEWPORT_EDITOR;
-        text_cursor->pos = 0;
-        text_cursor->x = 0;
-        text_cursor->y = 0;
-      }
+        editor_cursor_reset(text_cursor);
+     }
 
       if (keybind_viewport_mode_toggle(evt) == TRUE){
         if (viewport_active == VIEWPORT_DISPLAY){
           viewport_active = VIEWPORT_EDITOR;
-          text_cursor->pos = 0;
-          text_cursor->x = 0;
-          text_cursor->y = 0;
+          editor_cursor_reset(text_cursor);
           printf("switch to viewport editor\n");
           SDL_StartTextInput();
         }
@@ -1435,30 +1464,35 @@ int main(int argc, char* argv[]){
         
         // special key input
         // TODO cursor management, underline corner style
+        // TODO multi-cursor
         if (evt.type == SDL_KEYDOWN){
           // backspace
           if (evt.key.keysym.sym == SDLK_BACKSPACE && text_buffer->length > 0){
-            char* text_dst = text_buffer->text + text_cursor->pos - 1;
-            char* text_src = text_dst + 1;
-            char* text_end = text_buffer->text + text_buffer->length;
-            memmove(text_dst, text_src, text_end-text_src); 
+            for (size_t i=text_cursor->qty; i>0; i--){
+              char* text_dst = text_buffer->text + text_cursor->pos[i-1] - 1;
+              char* text_src = text_dst + 1;
+              char* text_end = text_buffer->text + text_buffer->length;
+              memmove(text_dst, text_src, text_end-text_src); 
 
-            --text_buffer->length;
-            text_buffer->text[text_buffer->length] = '\0';
-            text_buffer->line_length[text_cursor->y] -= 1; // TODO what if line length is already zero??
-            editor_cursor_move(text_buffer, text_cursor, TEXTCURSOR_MOVE_DIR_LEFT);
+              --text_buffer->length;
+              text_buffer->text[text_buffer->length] = '\0';
+              text_buffer->line_length[text_cursor->y[i-1]] -= 1; // TODO what if line length is already zero??
+              editor_cursor_move(text_buffer, text_cursor, i-1, TEXTCURSOR_MOVE_DIR_LEFT);
+            }
             render_text = 1;
             parse_text = TRUE;
           }
           else if( evt.key.keysym.sym == SDLK_DELETE && text_buffer->length > 0){
-            char* text_dst = text_buffer->text + text_cursor->pos;
-            char* text_src = text_dst + 1;
-            char* text_end = text_buffer->text + text_buffer->length;
-            memmove(text_dst, text_src, text_end-text_src); 
+            for (size_t i=text_cursor->qty; i>0; i--){
+              char* text_dst = text_buffer->text + text_cursor->pos[i-1];
+              char* text_src = text_dst + 1;
+              char* text_end = text_buffer->text + text_buffer->length;
+              memmove(text_dst, text_src, text_end-text_src); 
 
-            --text_buffer->length;
-            text_buffer->text[text_buffer->length] = '\0';
-            text_buffer->line_length[text_cursor->y] -= 1; // TODO what if line length is already zero??
+              --text_buffer->length;
+              text_buffer->text[text_buffer->length] = '\0';
+              text_buffer->line_length[text_cursor->y[i-1]] -= 1; // TODO what if line length is already zero??
+            }
             render_text = 1;
             parse_text = TRUE;
           }
@@ -1476,39 +1510,53 @@ int main(int argc, char* argv[]){
             printf("paste!\n");
           }
           else if (evt.key.keysym.sym == SDLK_RETURN){
-            // move text to make space for inserting characters
-            // TODO verify adding text at the end
-            char* text_src = text_buffer->text + text_cursor->pos;
-            char* text_dst = text_src + 1;
-            char* text_end = text_buffer->text + text_buffer->length;
-            memmove(text_dst, text_src, text_end - text_src);
+            for (size_t i=text_cursor->qty; i>0; i--){
+              // move text to make space for inserting characters
+              // TODO verify adding text at the end
+              char* text_src = text_buffer->text + text_cursor->pos[i-1];
+              char* text_dst = text_src + 1;
+              char* text_end = text_buffer->text + text_buffer->length;
+              memmove(text_dst, text_src, text_end - text_src);
 
-            // actually add the character
-            text_buffer->text[text_cursor->pos] = '\n';
-            ++text_buffer->length;
-            editor_cursor_move(text_buffer, text_cursor, TEXTCURSOR_MOVE_DIR_RIGHT);
+              // actually add the character
+              text_buffer->text[text_cursor->pos[i-1]] = '\n';
+              ++text_buffer->length;
+              editor_cursor_move(text_buffer, text_cursor, i-1, TEXTCURSOR_MOVE_DIR_RIGHT);
+            }
             render_text = 1;
             parse_text = TRUE;
 
             printf("[INSERT] RETURN\n"); 
           }
           else if(evt.key.keysym.sym == SDLK_LEFT){
-            editor_cursor_move(text_buffer, text_cursor, TEXTCURSOR_MOVE_DIR_LEFT);
+            for (size_t i=text_cursor->qty; i>0; i--){
+              editor_cursor_move(text_buffer, text_cursor, i-1, TEXTCURSOR_MOVE_DIR_LEFT);
+            }
           }
           else if(evt.key.keysym.sym == SDLK_RIGHT){
-            editor_cursor_move(text_buffer, text_cursor, TEXTCURSOR_MOVE_DIR_RIGHT);
+            for (size_t i=text_cursor->qty; i>0; i--){
+              editor_cursor_move(text_buffer, text_cursor, i-1, TEXTCURSOR_MOVE_DIR_RIGHT);
+            }
           }
           else if (evt.key.keysym.sym == SDLK_UP){
-            editor_cursor_move(text_buffer, text_cursor, TEXTCURSOR_MOVE_DIR_UP);
+            for (size_t i=text_cursor->qty; i>0; i--){
+              editor_cursor_move(text_buffer, text_cursor, i-1, TEXTCURSOR_MOVE_DIR_UP);
+            }
           }
           else if (evt.key.keysym.sym == SDLK_DOWN){
-            editor_cursor_move(text_buffer, text_cursor, TEXTCURSOR_MOVE_DIR_DOWN);
+            for (size_t i=text_cursor->qty; i>0; i--){
+              editor_cursor_move(text_buffer, text_cursor, i-1, TEXTCURSOR_MOVE_DIR_DOWN);
+            }
           }
           else if (evt.key.keysym.sym == SDLK_HOME){
-            editor_cursor_move(text_buffer, text_cursor, TEXTCURSOR_MOVE_LINE_START);
+            for (size_t i=text_cursor->qty; i>0; i--){
+              editor_cursor_move(text_buffer, text_cursor, i-1, TEXTCURSOR_MOVE_LINE_START);
+            }
           }
           else if (evt.key.keysym.sym == SDLK_END){
-            editor_cursor_move(text_buffer, text_cursor, TEXTCURSOR_MOVE_LINE_END);
+            for (size_t i=text_cursor->qty; i>0; i--){
+              editor_cursor_move(text_buffer, text_cursor, i-1, TEXTCURSOR_MOVE_LINE_END);
+            }
           }
           else if (keybind_editor_symbol_rename(evt) == TRUE){
             editor_symbol_rename(task_memory, user_memory, text_buffer, text_cursor);
@@ -1521,22 +1569,24 @@ int main(int argc, char* argv[]){
 
         } // keypress
         else if( evt.type == SDL_TEXTINPUT){
-          assert(text_buffer->length < EDITOR_BUFFER_LENGTH);
-          // TODO double check not copying or pasting??
-          // TODO fix first new character.. it needs a 
+          for (size_t i=text_cursor->qty; i>0; i--){
+            assert(text_buffer->length < EDITOR_BUFFER_LENGTH);
+            // TODO double check not copying or pasting??
+            // TODO fix first new character.. it needs a 
 
-          // move text to make space for inserting characters
-          // TODO verify adding text at the end
-          char* text_src = text_buffer->text + text_cursor->pos;
-          char* text_dst = text_src + 1;
-          char* text_end = text_buffer->text + text_buffer->length;
-          memmove(text_dst, text_src, text_end - text_src);
+            // move text to make space for inserting characters
+            // TODO verify adding text at the end
+            char* text_src = text_buffer->text + text_cursor->pos[i-1];
+            char* text_dst = text_src + 1;
+            char* text_end = text_buffer->text + text_buffer->length;
+            memmove(text_dst, text_src, text_end - text_src);
 
-          // actually add the character
-          text_buffer->text[text_cursor->pos] = evt.text.text[0];
-          ++text_buffer->length;
-          text_buffer->line_length[text_cursor->y] += 1;
-          editor_cursor_move(text_buffer, text_cursor, TEXTCURSOR_MOVE_DIR_RIGHT);
+            // actually add the character
+            text_buffer->text[text_cursor->pos[i-1]] = evt.text.text[0];
+            ++text_buffer->length;
+            text_buffer->line_length[text_cursor->y[i-1]] += 1;
+            editor_cursor_move(text_buffer, text_cursor, i-1, TEXTCURSOR_MOVE_DIR_RIGHT);
+          }
           render_text = 1;
           parse_text = TRUE;
 
@@ -1786,6 +1836,11 @@ int main(int argc, char* argv[]){
          
       } // viewport display
 
+      else if (viewport_active == VIEWPORT_RENAME){
+        // TODO now this is also a text editor...
+
+      }
+
     } // end processing events
 
     if (display_selection_changed == TRUE){
@@ -1930,16 +1985,22 @@ int main(int argc, char* argv[]){
 
           // cursor drawing!
           if (viewport_active == VIEWPORT_EDITOR){
-            if ((text_cursor->pos >= line_start - text_buffer->text) && (text_cursor->pos < line_end - text_buffer->text)){
-              // draw a shaded background
-              SDL_Rect cursor_line_background = {
-                .x = 0,
-                .y = line_height_offset,
-                .w = viewport_editor.w, 
-                .h = 20
-              }; // TODO need to have a font line height as independent variable!
-              SDL_SetRenderDrawColor(render, 230, 230, 230, 255);
-              SDL_RenderFillRect(render, &cursor_line_background);
+            if (text_cursor->qty == 1){
+              if ((text_cursor->pos[0] >= line_start - text_buffer->text) && (text_cursor->pos[0] < line_end - text_buffer->text)){
+                // draw a shaded background
+                SDL_Rect cursor_line_background = {
+                  .x = 0,
+                  .y = line_height_offset,
+                  .w = viewport_editor.w, 
+                  .h = 20
+                }; // TODO need to have a font line height as independent variable!
+                SDL_SetRenderDrawColor(render, 230, 230, 230, 255);
+                SDL_RenderFillRect(render, &cursor_line_background);
+              }
+            }
+
+            for (size_t i=0; i<text_cursor->qty; ++i){
+              if ((text_cursor->pos[i] >= line_start - text_buffer->text) && (text_cursor->pos[i] < line_end - text_buffer->text)){
 
               // find the location within the line?
               // TODO need to reference this to actual glyph widths!!
@@ -1947,14 +2008,14 @@ int main(int argc, char* argv[]){
               // editor_cursor_pos_y = text_lines - 1; // -1 for zero indexing
 
               SDL_Rect cursor_draw = {
-                .x = text_cursor->x * 10,
+                .x = text_cursor->x[i] * 10,
                 .y = line_height_offset,
                 .w = 3,
                 .h = 20
               };
               SDL_SetRenderDrawColor(render, 50, 50, 80, 255);
               SDL_RenderFillRect(render, &cursor_draw);
-
+              }
             } 
           } // cursor drawing
 
@@ -2142,6 +2203,6 @@ int main(int argc, char* argv[]){
   schedule_free(schedule_best); 
   schedule_free(schedule_working);
   free(task_displays); 
-
+  editor_cursor_destroy(text_cursor);
  return 0;
 }
