@@ -140,7 +140,6 @@ Task* task_get(Task_Memory* task_memory, char* task_name, int task_name_length){
   return task;
 }
 
-
 // check if the given user is already assigned to the given task
 uint8_t task_user_has(Task* task, User* user){
   uint8_t result = FALSE;
@@ -223,7 +222,22 @@ void task_user_remove_unvisited(Task* task, User_Memory* user_memory){
     }
   }
 }
-    
+ 
+
+void task_destroy(Task_Memory* task_memory, Task* task){
+  assert(task->trash == FALSE); // don't try and remove already-removed tasks
+  task->trash = TRUE;
+  if (task_memory->allocation_used > 0){
+    task_memory->allocation_used -= 1;
+  }
+  printf("REMOVING tasks.name=%s..\n", task->task_name);
+  hash_table_remove(task_memory->hashtable, task->task_name);
+
+  for (size_t u=0; u<task->user_qty; ++u){
+    task_user_remove(task, task->users[u]);
+  }
+}
+
 
 void task_dependents_find_all(Task_Memory* task_memory){
   Task* tasks = task_memory->tasks;
@@ -348,12 +362,7 @@ void editor_tasks_cleanup(Task_Memory* task_memory){
 
         // if we did not visit the node this time parsing the text
         if (task_memory->editor_visited[i] == FALSE){ 
-          tasks[i].trash = TRUE; 
-          if (task_memory->allocation_used > 0){
-            task_memory->allocation_used -= 1;
-          }
-          printf("REMOVING tasks[%ld].name=%s..\n", i, tasks[i].task_name);
-          hash_table_remove(task_memory->hashtable, tasks[i].task_name);
+          task_destroy(task_memory, tasks+i);
         }
       }
     }
@@ -1245,7 +1254,7 @@ void editor_symbol_rename(Task_Memory* task_memory, User_Memory* user_memory, Te
     }
 
     // mark end for the old task
-    old->trash = TRUE;
+    task_destroy(task_memory, old);
   }
 
   // or prereq? are these the same?
