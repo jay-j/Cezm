@@ -768,10 +768,19 @@ void sdl_startup(SDL_Window** win, SDL_Renderer** render){
     printf("SDL init failed! %s\n", SDL_GetError());
     assert(0);
   }
-  
-  *win = SDL_CreateWindow("[unnamed project planning software]", 
-    SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 
-    WINDOW_WIDTH_INIT, WINDOW_HEIGHT_INIT, SDL_WINDOW_OPENGL | SDL_WINDOW_SHOWN | SDL_WINDOW_ALLOW_HIGHDPI | SDL_WINDOW_RESIZABLE);
+ 
+  if (SDL_GetNumVideoDisplays() > 1){ // TODO HACK for stream
+    SDL_Rect monitor;
+    SDL_GetDisplayBounds(1, &monitor);
+    *win = SDL_CreateWindow("[unnamed project planning software]", 
+      monitor.x, monitor.y,
+      WINDOW_WIDTH_INIT, WINDOW_HEIGHT_INIT, SDL_WINDOW_OPENGL | SDL_WINDOW_SHOWN | SDL_WINDOW_ALLOW_HIGHDPI | SDL_WINDOW_RESIZABLE);
+  }
+  else{
+    *win = SDL_CreateWindow("[unnamed project planning software]", 
+      SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 
+      WINDOW_WIDTH_INIT, WINDOW_HEIGHT_INIT, SDL_WINDOW_OPENGL | SDL_WINDOW_SHOWN | SDL_WINDOW_ALLOW_HIGHDPI | SDL_WINDOW_RESIZABLE);
+  }
   assert(*win != NULL);
 
   *render = SDL_CreateRenderer(*win, -1, SDL_RENDERER_ACCELERATED);
@@ -975,11 +984,12 @@ void editor_find_line_lengths(TextBuffer* tb){
   }
 }
 
-editor_cursor_reset(Text_Cursor* text_cursor){
+void editor_cursor_reset(Text_Cursor* text_cursor){
   text_cursor->pos[0] = 0;
   text_cursor->x[0] = 0;
   text_cursor->y[0] = 0;
   text_cursor->qty = 1;
+  text_cursor->entity_type = TEXTCURSOR_ENTITY_NONE;
 }
 
 
@@ -998,15 +1008,90 @@ void editor_cursor_destroy(Text_Cursor* text_cursor){
   free(text_cursor->pos);
   free(text_cursor->x);
   free(text_cursor->y);
-  free(text_cursor->entity);
   free(text_cursor);
 }
 
 
-// sort the multi-cursors back to front for text editing with the easiest manipulations TODO
-void editor_cursor_sort(Text_Cursor* text_cursor){
+// given pos, find xy at that index. revealss there is still a problem with 0/1 length lines
+void editor_cursor_find_xy(TextBuffer* text_buffer, Text_Cursor* text_cursor, size_t index){
+  int* line = &(text_cursor->y[index]);
+  *line = 0;
+  int sum = text_buffer->line_length[*line];
+  while (sum < text_cursor->pos[index]){ // add to the end of the line (after the cursor)
+    *line += 1;
+    sum += text_buffer->line_length[*line];
+  }
+
+  text_cursor->x[index] = text_buffer->line_length[*line] - (sum - text_cursor->pos[index]);
+
+  printf("pos: %d --> (x,y) = (%d, %d)\n", text_cursor->pos[index], text_cursor->x[index], text_cursor->y[index]);
+}
 
 
+size_t editor_cursor_quicksort_partition(int* list, size_t start, size_t end){
+   // pivot value, from the middle of the array
+   int pivot_index = (int) floor((start + end)/2 );
+   int pivot = list[pivot_index];
+
+   // left index
+   size_t i = start - 1;
+
+   // right index
+   size_t j = end + 1;
+
+   for(;;){
+      // move the left index to the right (at least once) 
+      // and while element at the left is less than the pivot
+      do {
+         ++i;
+      } while(list[i] < pivot);
+
+      // move the right index to the left at least once 
+      // and while element at the right index is greater than the pivot
+      do {
+         --j;
+      } while (list[j] > pivot);
+
+      // if indices crossed, give up!
+      if (i >= j){
+         return j;
+      }
+
+      // swap
+      int tmp = list[i];
+      list[i] = list[j];
+      list[j] = tmp;
+   }
+
+}
+
+// quicksort thanks to wikipedia ! Hoare partition
+void editor_cursor_quicksort(int* list, size_t start, size_t end){
+   // if ((start >= 0) & (end >= 0) & (start < end)){
+   if (start < end){
+
+      // partition and get pivot index
+      size_t pivot_loc = editor_cursor_quicksort_partition(list, start, end);
+
+      // recursive break into subproblems
+      editor_cursor_quicksort(list, start, pivot_loc);
+      editor_cursor_quicksort(list, pivot_loc+1, end);
+   }
+  
+   return;
+}
+
+
+// sort the cursors in descending order, then recompute xy coordinates
+void editor_cursor_sort(TextBuffer* text_buffer, Text_Cursor* text_cursor){
+  // sort pos using quicksort
+  editor_cursor_quicksort(text_cursor->pos, 0, text_cursor->qty-1);
+
+  // then process to recompute xy
+  printf("result after sorting..\n");
+  for (size_t i=0; i<text_cursor->qty; ++i){
+    editor_cursor_find_xy(text_buffer, text_cursor, i);
+  }
 }
 
 
@@ -1080,7 +1165,10 @@ void editor_cursor_move(TextBuffer* tb, Text_Cursor* tc, size_t index, int moved
   }
 
 printf("move index %lu in direction %d\n", index, movedir);
+
+//editor_cursor_find_xy(tb, tc, index);
 }
+
 
 // throw out everything, load from a file and parse it
 void editor_load_text(Task_Memory* task_memory, User_Memory* user_memory, TextBuffer* text_buffer, const char* filename, Text_Cursor* text_cursor){
@@ -1410,7 +1498,7 @@ int main(int argc, char* argv[]){
       if (evt.type == SDL_QUIT){
         goto cleanup;
       }
-      if (evt.type == SDL_KEYDOWN && evt.key.keysym.sym == SDLK_ESCAPE){
+      if (keybind_global_quit(evt) == TRUE){
         goto cleanup;
       }
       // SAVE
@@ -1468,16 +1556,17 @@ int main(int argc, char* argv[]){
         if (evt.type == SDL_KEYDOWN){
           // backspace
           if (evt.key.keysym.sym == SDLK_BACKSPACE && text_buffer->length > 0){
-            for (size_t i=text_cursor->qty; i>0; i--){
-              char* text_dst = text_buffer->text + text_cursor->pos[i-1] - 1;
+            //for (size_t i=text_cursor->qty; i>0; i--){
+            for (size_t i=0; i<text_cursor->qty; ++i){
+              char* text_dst = text_buffer->text + text_cursor->pos[i] - 1;
               char* text_src = text_dst + 1;
               char* text_end = text_buffer->text + text_buffer->length;
               memmove(text_dst, text_src, text_end-text_src); 
 
               --text_buffer->length;
               text_buffer->text[text_buffer->length] = '\0';
-              text_buffer->line_length[text_cursor->y[i-1]] -= 1; // TODO what if line length is already zero??
-              editor_cursor_move(text_buffer, text_cursor, i-1, TEXTCURSOR_MOVE_DIR_LEFT);
+              text_buffer->line_length[text_cursor->y[i]] -= 1; // TODO what if line length is already zero??
+              editor_cursor_move(text_buffer, text_cursor, i, TEXTCURSOR_MOVE_DIR_LEFT);
             }
             render_text = 1;
             parse_text = TRUE;
@@ -1558,35 +1647,71 @@ int main(int argc, char* argv[]){
               editor_cursor_move(text_buffer, text_cursor, i-1, TEXTCURSOR_MOVE_LINE_END);
             }
           }
+          else if (keybind_editor_multicursor_deselect(evt) == TRUE){
+            text_cursor->qty = 1; 
+            // TODO behavior choice
+            size_t index = 0;
+            printf("pos: %d --> (x,y) = (%d, %d)\n", text_cursor->pos[index], text_cursor->x[index], text_cursor->y[index]);
+            editor_cursor_find_xy(text_buffer, text_cursor, 0);
+          }
           else if (keybind_editor_symbol_rename(evt) == TRUE){
             editor_symbol_rename(task_memory, user_memory, text_buffer, text_cursor);
             parse_text = TRUE;
             display_selection_changed = TRUE;
           }
-          // F2 - rename symbol in edit mode
+          else if (evt.key.keysym.sym == SDLK_F4){ // TODO HACK start things
+            text_cursor->pos[text_cursor->qty] = text_cursor->pos[text_cursor->qty-1] + 20;
+            text_cursor->qty += 1;
+            editor_cursor_sort(text_buffer, text_cursor);
+          }
+          else if (evt.key.keysym.sym == SDLK_F5){
+            printf("updating xy coordinates of all cursors\n");
+            for (size_t i=0; i<text_cursor->qty; ++i){
+              editor_cursor_find_xy(text_buffer, text_cursor, i);
+            }
+          }
+            // F2 - rename symbol in edit mode
           // SHIFT+F2 - rename symbol even if not in edit mode
           // F3 - search stuff! can be smart scoping?
 
         } // keypress
-        else if( evt.type == SDL_TEXTINPUT){
-          for (size_t i=text_cursor->qty; i>0; i--){
+        else if ((evt.type == SDL_TEXTINPUT) && !(SDL_GetModState() & KMOD_CTRL)){
+          // assume cursors are sorted from soonest to latest in thee text
+          for (size_t i=0; i<text_cursor->qty; ++i){
             assert(text_buffer->length < EDITOR_BUFFER_LENGTH);
-            // TODO double check not copying or pasting??
+
+            // update current cursor based on prior text growth
+            // TODO nope! because a prior entry increasing in memory space doesn't necessarily mean a future one increasing in X space
+            for (size_t j=0; j<i; ++j){
+              printf("pre move\n");
+              editor_cursor_move(text_buffer, text_cursor, i, TEXTCURSOR_MOVE_DIR_RIGHT);
+            }
+            int pos = text_cursor->pos[i]; // account for previous additions
+            printf("adding character '%c' at %d\n", evt.text.text[0], pos); 
             // TODO fix first new character.. it needs a 
 
             // move text to make space for inserting characters
             // TODO verify adding text at the end
-            char* text_src = text_buffer->text + text_cursor->pos[i-1];
+            char* text_src = text_buffer->text + pos; 
             char* text_dst = text_src + 1;
             char* text_end = text_buffer->text + text_buffer->length;
             memmove(text_dst, text_src, text_end - text_src);
 
             // actually add the character
-            text_buffer->text[text_cursor->pos[i-1]] = evt.text.text[0];
+            text_buffer->text[pos] = evt.text.text[0];
             ++text_buffer->length;
-            text_buffer->line_length[text_cursor->y[i-1]] += 1;
-            editor_cursor_move(text_buffer, text_cursor, i-1, TEXTCURSOR_MOVE_DIR_RIGHT);
+            text_buffer->line_length[text_cursor->y[i]] += 1;
+            printf("final move right\n");
+            editor_cursor_move(text_buffer, text_cursor, i, TEXTCURSOR_MOVE_DIR_RIGHT);
           }
+
+          /*
+          printf("result after sorting..\n");
+          for (size_t i=0; i<text_cursor->qty; ++i){
+            editor_cursor_find_xy(text_buffer, text_cursor, i);
+          }
+          */
+
           render_text = 1;
           parse_text = TRUE;
 
@@ -1836,13 +1961,10 @@ int main(int argc, char* argv[]){
          
       } // viewport display
 
-      else if (viewport_active == VIEWPORT_RENAME){
-        // TODO now this is also a text editor...
-
-      }
-
     } // end processing events
+    // TODO navigate around the displayed nodes
 
+    /////////////////////////////// PROCESSING //////////////////////////////////////////
     if (display_selection_changed == TRUE){
       printf("[STATUS] DISPLAY SELECTION CHANGED=============\n");
       for (size_t u=0; u<user_memory->allocation_total; ++u){
@@ -1861,11 +1983,12 @@ int main(int argc, char* argv[]){
     }
 
     if ((display_selection_changed == TRUE) || (parse_text == TRUE)){
+      //editor_cursor_sort(text_buffer, text_cursor); // TODO why does this get messed up? don't want to update it
+
       // figure out how many lines there are to render
       editor_find_line_lengths(text_buffer);
     }
 
-    // TODO navigate around the displayed nodes
     if (parse_text == TRUE){
       printf("[STATUS] TEXT PARSING REQUESTED--------------------------------------\n");
 
@@ -1950,6 +2073,7 @@ int main(int argc, char* argv[]){
       }
     } // end parse text & schedule
 
+    /////////////////////////////// SECTION RENDERING //////////////////////////////////////////
     // clear screen
     SDL_SetRenderDrawColor(render, 0xFF, 0xFF, 0xFF, 0xFF); // chooose every frame now
     SDL_RenderClear(render);
@@ -2117,7 +2241,7 @@ int main(int argc, char* argv[]){
       }
     }
 
-    // DRAW the keyboard cursor for display mode
+    // TODO DRAW the keyboard cursor for display mode
 
     // DRAW THE TASKS AND RELATION CURVES
     if (task_memory->allocation_used > 0){      
@@ -2181,7 +2305,6 @@ int main(int argc, char* argv[]){
       SDL_RenderFillRect(render, &rect_errors);
     }
     
-
     //// UPDATE SCREEN
     SDL_RenderPresent(render);
 
@@ -2191,10 +2314,6 @@ int main(int argc, char* argv[]){
     display_selection_changed = FALSE;
   } // while forever
 
-
-
-  // TODO track which timeline element(s) the user currently has selected
-  
 
   cleanup:
   sdl_cleanup(win, render);

@@ -5,6 +5,13 @@
 
 //// global keybindings - functional regarless of mode ////
 
+uint8_t keybind_global_quit(SDL_Event evt){
+  if (evt.type == SDL_KEYDOWN && evt.key.keysym.sym == SDLK_q && SDL_GetModState() & KMOD_CTRL){
+    return TRUE;
+  }
+  return FALSE;
+}
+
 uint8_t keybind_global_file_save(SDL_Event evt){
   if (evt.type == SDL_KEYDOWN && evt.key.keysym.sym == SDLK_s && SDL_GetModState() & KMOD_CTRL){
     return TRUE;
@@ -27,6 +34,13 @@ uint8_t keybind_viewport_mode_toggle(SDL_Event evt){
 }
 
 //// editor mode keybindings ////
+
+uint8_t keybind_editor_multicursor_deselect(SDL_Event evt){
+  if (evt.key.keysym.sym == SDLK_ESCAPE && evt.type == SDL_KEYDOWN){
+    return TRUE;
+  }
+  return FALSE;
+}
 
 uint8_t keybind_editor_symbol_rename(SDL_Event evt){
   if (evt.key.keysym.sym == SDLK_F2 && evt.type == SDL_KEYDOWN){
