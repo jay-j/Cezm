@@ -1565,10 +1565,14 @@ int main(int argc, char* argv[]){
         // TODO cursor management, underline corner style
         // TODO multi-cursor
         if (evt.type == SDL_KEYDOWN){
-          // backspace
           if (evt.key.keysym.sym == SDLK_BACKSPACE && text_buffer->length > 0){
-            //for (size_t i=text_cursor->qty; i>0; i--){
             for (size_t i=0; i<text_cursor->qty; ++i){
+              // compensate for previous movement
+              for (size_t j=0; j<i; ++j){
+                text_cursor->pos[i] -= 1;
+              }
+
+              // actually remove the character
               char* text_dst = text_buffer->text + text_cursor->pos[i] - 1;
               char* text_src = text_dst + 1;
               char* text_end = text_buffer->text + text_buffer->length;
@@ -1577,21 +1581,28 @@ int main(int argc, char* argv[]){
               --text_buffer->length;
               text_buffer->text[text_buffer->length] = '\0';
               text_buffer->line_length[text_cursor->y[i]] -= 1; // TODO what if line length is already zero??
-              editor_cursor_move(text_buffer, text_cursor, i, TEXTCURSOR_MOVE_DIR_LEFT);
+
+              // now move this cursor left for the backspace action
+              text_cursor->pos[i] -= 1;
             }
             render_text = 1;
             parse_text = TRUE;
           }
           else if( evt.key.keysym.sym == SDLK_DELETE && text_buffer->length > 0){
-            for (size_t i=text_cursor->qty; i>0; i--){
-              char* text_dst = text_buffer->text + text_cursor->pos[i-1];
+            for (size_t i=0; i<text_cursor->qty; ++i){
+              // compensate for previous movement
+              for (size_t j=0; j<i; ++j){
+                text_cursor->pos[i] -= 1;
+              }
+
+              char* text_dst = text_buffer->text + text_cursor->pos[i];
               char* text_src = text_dst + 1;
               char* text_end = text_buffer->text + text_buffer->length;
               memmove(text_dst, text_src, text_end-text_src); 
 
               --text_buffer->length;
               text_buffer->text[text_buffer->length] = '\0';
-              text_buffer->line_length[text_cursor->y[i-1]] -= 1; // TODO what if line length is already zero??
+              text_buffer->line_length[text_cursor->y[i]] -= 1; // TODO what if line length is already zero??
             }
             render_text = 1;
             parse_text = TRUE;
@@ -1610,18 +1621,23 @@ int main(int argc, char* argv[]){
             printf("paste!\n");
           }
           else if (evt.key.keysym.sym == SDLK_RETURN){
-            for (size_t i=text_cursor->qty; i>0; i--){
+            for (size_t i=0; i<text_cursor->qty; ++i){
+              // compensate for previous movement
+              for (size_t j=0; j<i; ++j){
+                text_cursor->pos[i] += 1;
+              }
+
               // move text to make space for inserting characters
               // TODO verify adding text at the end
-              char* text_src = text_buffer->text + text_cursor->pos[i-1];
+              char* text_src = text_buffer->text + text_cursor->pos[i];
               char* text_dst = text_src + 1;
               char* text_end = text_buffer->text + text_buffer->length;
               memmove(text_dst, text_src, text_end - text_src);
 
               // actually add the character
-              text_buffer->text[text_cursor->pos[i-1]] = '\n';
+              text_buffer->text[text_cursor->pos[i]] = '\n';
               ++text_buffer->length;
-              editor_cursor_move(text_buffer, text_cursor, i-1, TEXTCURSOR_MOVE_DIR_RIGHT);
+              text_cursor->pos[i] += 1;
             }
             render_text = 1;
             parse_text = TRUE;
@@ -1984,10 +2000,10 @@ int main(int argc, char* argv[]){
     }
 
     if ((display_selection_changed == TRUE) || (parse_text == TRUE)){
-      editor_cursor_find_xy(text_buffer, text_cursor);
-
       // figure out how many lines there are to render
       editor_find_line_lengths(text_buffer);
+      
+      editor_cursor_find_xy(text_buffer, text_cursor);
     }
 
     if (parse_text == TRUE){
