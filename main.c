@@ -1231,7 +1231,7 @@ char* text_append_string(char* text, char* addition){
 
 
 void editor_text_from_data(Task_Memory* task_memory, TextBuffer* text_buffer, uint8_t all_tasks){
-  char* cursor = text_buffer->text;
+  char* text = text_buffer->text;
 
   // Fill the new one
   for (size_t t=0; t<task_memory->allocation_total; ++t){
@@ -1239,74 +1239,74 @@ void editor_text_from_data(Task_Memory* task_memory, TextBuffer* text_buffer, ui
     if (task->trash == FALSE){
       if ((task->mode_edit == TRUE) || (all_tasks == TRUE)){
         // task name
-        memcpy(cursor, task->task_name, task->task_name_length);
-        cursor += task->task_name_length;
-        cursor = text_append_string(cursor, " {\n");
+        memcpy(text, task->task_name, task->task_name_length);
+        text += task->task_name_length;
+        text = text_append_string(text, " {\n");
 
         // duration
         if ((task->schedule_constraints & SCHEDULE_CONSTRAINT_DURATION) > 0){
-          cursor = text_append_string(cursor, "  duration: ");
+          text = text_append_string(text, "  duration: ");
           int length = snprintf(NULL, 0, "%ld", task->day_duration);
-          int result = snprintf(cursor, length+1, "%ld", task->day_duration); // +1 due to how snprintf accounts for \0
+          int result = snprintf(text, length+1, "%ld", task->day_duration); // +1 due to how snprintf accounts for \0
           assert(result > 0);
-          cursor += length;
-          cursor = text_append_char(cursor, '\n');
+          text += length;
+          text = text_append_char(text, '\n');
         }
           
         // prereqs (dependency)
         if (task->prereq_qty > 0){
-          cursor = text_append_string(cursor, "  prereq: ");
+          text = text_append_string(text, "  prereq: ");
 
           for (size_t i=0; i<task->prereq_qty; ++i){
-            memcpy(cursor, task->prereqs[i]->task_name, task->prereqs[i]->task_name_length);
-            cursor += task->prereqs[i]->task_name_length;
-            cursor = text_append_string(cursor, ", ");
+            memcpy(text, task->prereqs[i]->task_name, task->prereqs[i]->task_name_length);
+            text += task->prereqs[i]->task_name_length;
+            text = text_append_string(text, ", ");
           }
-          cursor -= 2;
-          cursor = text_append_char(cursor, '\n');
+          text -= 2;
+          text = text_append_char(text, '\n');
         }
         
         // users
         if (task->user_qty > 0){
-          cursor = text_append_string(cursor, "  user: ");
+          text = text_append_string(text, "  user: ");
 
           for (size_t u=0; u<task->user_qty; ++u){
-            memcpy(cursor, task->users[u]->name, task->users[u]->name_length);
-            cursor += task->users[u]->name_length;
-            cursor = text_append_string(cursor, ", ");
+            memcpy(text, task->users[u]->name, task->users[u]->name_length);
+            text += task->users[u]->name_length;
+            text = text_append_string(text, ", ");
           }
-          cursor -= 2;
-          cursor = text_append_char(cursor, '\n');
+          text -= 2;
+          text = text_append_char(text, '\n');
         }
 
         // fixed dates
         if ((task->schedule_constraints & SCHEDULE_CONSTRAINT_START) > 0){
-          cursor = text_append_string(cursor, "  fixed_start: ");
-          cursor = text_append_date(cursor, task->day_start);
-          cursor = text_append_char(cursor, '\n');
+          text = text_append_string(text, "  fixed_start: ");
+          text = text_append_date(text, task->day_start);
+          text = text_append_char(text, '\n');
         }
         if ((task->schedule_constraints & SCHEDULE_CONSTRAINT_END) > 0){
-          cursor = text_append_string(cursor, "  fixed_end: ");
-          cursor = text_append_date(cursor, task->day_end);
-          cursor = text_append_char(cursor, '\n');
+          text = text_append_string(text, "  fixed_end: ");
+          text = text_append_date(text, task->day_end);
+          text = text_append_char(text, '\n');
         }
 
         // color
         {
-          cursor = text_append_string(cursor, "  color: ");
+          text = text_append_string(text, "  color: ");
           int length = snprintf(NULL, 0, "%u", task->status_color);
-          int result = snprintf(cursor, length+1, "%u", task->status_color);
+          int result = snprintf(text, length+1, "%u", task->status_color);
           assert(result > 0);
-          cursor += length;
-          cursor = text_append_char(cursor, '\n');
+          text += length;
+          text = text_append_char(text, '\n');
         }
 
         // end this task
-        cursor = text_append_string(cursor, "}\n");
+        text = text_append_string(text, "}\n");
       }
     }
   }
-  text_buffer->length = cursor - text_buffer->text;
+  text_buffer->length = text - text_buffer->text;
 
   if (text_buffer->length == 0){
     text_buffer->text[0] = ' ';
@@ -1331,6 +1331,9 @@ void text_buffer_save(TextBuffer* text_buffer, char* filename){
 
 void editor_symbol_rename(Task_Memory* task_memory, User_Memory* user_memory, TextBuffer* text_buffer, Text_Cursor* text_cursor){
   printf("[SYMBOL RENAME] FUNCTION ACTIVATED**********************************\n");
+  if (text_cursor->qty > 1){
+    printf("[WARNING] CURRENT ENTITY BASED ONLY ON FIRST CURSOR [0]\n");
+  }
  
   // force parsing of the text to update the cursor stuff
   editor_parse_text(task_memory, user_memory, text_buffer, text_cursor);
@@ -1695,7 +1698,7 @@ int main(int argc, char* argv[]){
             printf("updating xy coordinates of all cursors\n");
             editor_cursor_find_xy(text_buffer, text_cursor);
           }
-            // F2 - rename symbol in edit mode
+          // F2 - rename symbol in edit mode
           // SHIFT+F2 - rename symbol even if not in edit mode
           // F3 - search stuff! can be smart scoping?
 
