@@ -2068,11 +2068,17 @@ int main(int argc, char* argv[]){
           }
         }
         
-        // figure out the user columns 
+        // figure out the user column coordinates, make the nouser column (dis)appear as needed
         int user_column_increment = viewport_display.w / (user_memory->allocation_used + 1);
-        int nouser_column_center_px = user_column_increment/2;
-        int user_column_loc = user_column_increment + user_column_increment / 2;
         size_t user_column_count = 1;
+        int user_column_loc = user_column_increment + user_column_increment / 2;
+        if (orphaned_tasks == FALSE){
+          printf("orphaned tasks == FALSE\n");
+          user_column_increment = viewport_display.w / (user_memory->allocation_used);
+          user_column_count = 0;
+          user_column_loc = user_column_increment / 2;
+        }
+        int nouser_column_center_px = user_column_increment/2;
         for (size_t i=0; i<user_memory->allocation_total; ++i){ 
           if (users[i].trash == FALSE){
             users[i].column_index = user_column_count;
@@ -2082,7 +2088,6 @@ int main(int argc, char* argv[]){
           }
         }
 
-        // TODO pull out the username text box drawing
         // TODO column sorting?
         // have a list of pointers... so the shared 'column center pixel' is a pointer to which user, essentially.. and then those get shuffled to optimize?
         // basically.. want a dynamically updating thing so to change column is just changing one integer, not searching through N display_tasks to change every one
