@@ -1012,19 +1012,26 @@ void editor_cursor_destroy(Text_Cursor* text_cursor){
 }
 
 
-// given pos, find xy at that index. revealss there is still a problem with 0/1 length lines
-void editor_cursor_find_xy(TextBuffer* text_buffer, Text_Cursor* text_cursor, size_t index){
-  int* line = &(text_cursor->y[index]);
-  *line = 0;
-  int sum = text_buffer->line_length[*line];
-  while (sum < text_cursor->pos[index]){ // add to the end of the line (after the cursor)
-    *line += 1;
-    sum += text_buffer->line_length[*line];
+// given pos, find xy at all indexes. shows a problem with 0/1 length lines?
+void editor_cursor_find_xy(TextBuffer* text_buffer, Text_Cursor* text_cursor){
+
+  // assume that incoming points are sorted - verify with assertions
+
+  // advance until we find the xy for the first one
+  // then keep advancing but look for the next one
+
+  int line = 0;
+  int sum = text_buffer->line_length[line];
+  for (size_t index=0; index<text_cursor->qty; ++index){
+    while (sum < text_cursor->pos[index]){ // add to the end of the line (after the cursor)
+      line += 1;
+      sum += text_buffer->line_length[line];
+    }
+    text_cursor->y[index] = line;
+    text_cursor->x[index] = text_buffer->line_length[line] - (sum - text_cursor->pos[index]);
+    printf("pos: %d --> (x,y) = (%d, %d)\n", text_cursor->pos[index], text_cursor->x[index], text_cursor->y[index]);
   }
 
-  text_cursor->x[index] = text_buffer->line_length[*line] - (sum - text_cursor->pos[index]);
-
-  printf("pos: %d --> (x,y) = (%d, %d)\n", text_cursor->pos[index], text_cursor->x[index], text_cursor->y[index]);
 }
 
 
@@ -1089,9 +1096,7 @@ void editor_cursor_sort(TextBuffer* text_buffer, Text_Cursor* text_cursor){
 
   // then process to recompute xy
   printf("result after sorting..\n");
-  for (size_t i=0; i<text_cursor->qty; ++i){
-    editor_cursor_find_xy(text_buffer, text_cursor, i);
-  }
+  editor_cursor_find_xy(text_buffer, text_cursor);
 }
 
 
@@ -1166,6 +1171,7 @@ void editor_cursor_move(TextBuffer* tb, Text_Cursor* tc, size_t index, int moved
 
 printf("move index %lu in direction %d\n", index, movedir);
 
+  // TODO is this the best?
 //editor_cursor_find_xy(tb, tc, index);
 }
 
@@ -1332,6 +1338,11 @@ void editor_symbol_rename(Task_Memory* task_memory, User_Memory* user_memory, Te
   // if renaming task...
   if (text_cursor->entity_type == TEXTCURSOR_ENTITY_TASK){
     printf("renaming task!\n");
+
+    // get the task name
+    // mark all related tasks in edit mode
+    // regenerate text.. put a cursor at each relevant location in edit mode
+
     // TODO some kind of renaming text input UI! :(
     // TODO a new viewport that appears as a header to the editor viewport?
     // need to parse-as-you-type and update live?
@@ -1652,7 +1663,7 @@ int main(int argc, char* argv[]){
             // TODO behavior choice
             size_t index = 0;
             printf("pos: %d --> (x,y) = (%d, %d)\n", text_cursor->pos[index], text_cursor->x[index], text_cursor->y[index]);
-            editor_cursor_find_xy(text_buffer, text_cursor, 0);
+            editor_cursor_find_xy(text_buffer, text_cursor);
           }
           else if (keybind_editor_symbol_rename(evt) == TRUE){
             editor_symbol_rename(task_memory, user_memory, text_buffer, text_cursor);
@@ -1666,9 +1677,7 @@ int main(int argc, char* argv[]){
           }
           else if (evt.key.keysym.sym == SDLK_F5){
             printf("updating xy coordinates of all cursors\n");
-            for (size_t i=0; i<text_cursor->qty; ++i){
-              editor_cursor_find_xy(text_buffer, text_cursor, i);
-            }
+            editor_cursor_find_xy(text_buffer, text_cursor);
           }
             // F2 - rename symbol in edit mode
           // SHIFT+F2 - rename symbol even if not in edit mode
@@ -1680,8 +1689,7 @@ int main(int argc, char* argv[]){
           for (size_t i=0; i<text_cursor->qty; ++i){
             assert(text_buffer->length < EDITOR_BUFFER_LENGTH);
 
-            // update current cursor based on prior text growth
-            // TODO nope! because a prior entry increasing in memory space doesn't necessarily mean a future one increasing in X space
+            // update current cursor based on prior text growth. xy needs to be corrected later
             for (size_t j=0; j<i; ++j){
               printf("pre move\n");
               editor_cursor_move(text_buffer, text_cursor, i, TEXTCURSOR_MOVE_DIR_RIGHT);
@@ -1704,13 +1712,6 @@ int main(int argc, char* argv[]){
             printf("final move right\n");
             editor_cursor_move(text_buffer, text_cursor, i, TEXTCURSOR_MOVE_DIR_RIGHT);
           }
-
-          /*
-          printf("result after sorting..\n");
-          for (size_t i=0; i<text_cursor->qty; ++i){
-            editor_cursor_find_xy(text_buffer, text_cursor, i);
-          }
-          */
 
           render_text = 1;
           parse_text = TRUE;
@@ -1983,7 +1984,7 @@ int main(int argc, char* argv[]){
     }
 
     if ((display_selection_changed == TRUE) || (parse_text == TRUE)){
-      //editor_cursor_sort(text_buffer, text_cursor); // TODO why does this get messed up? don't want to update it
+      editor_cursor_find_xy(text_buffer, text_cursor);
 
       // figure out how many lines there are to render
       editor_find_line_lengths(text_buffer);
