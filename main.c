@@ -1387,10 +1387,37 @@ void editor_symbol_rename(Task_Memory* task_memory, User_Memory* user_memory, Te
     for (size_t t=0; t<task->dependent_qty; ++t){
       task->dependents[t]->mode_edit = TRUE;
     }
-
-    // regenerate text..
-    editor_text_from_data(task_memory, text_buffer, FALSE); 
   }
+  else if (text_cursor->entity_type == TEXTCURSOR_ENTITY_USER){
+    printf("renaming user\n");
+    User* user = (User*) text_cursor->entity;
+
+    // set the keyword as name
+    keyword = user->name;
+    keyword_length = user->name_length;
+
+    // mark all related tasks in edit mode
+    for (size_t t=0; t<user->task_qty; ++t){
+      user->tasks[t]->mode_edit = TRUE;
+    }
+  }
+  else if (text_cursor->entity_type == TEXTCURSOR_ENTITY_PREREQ){
+    printf("renaming task by prereq reference!\n");
+    Task* task = (Task*) text_cursor->entity;
+
+    // get the task name
+    keyword = task->task_name;
+    keyword_length = task->task_name_length;
+    
+    // mark all related tasks in edit mode
+    task->mode_edit = TRUE;
+    for (size_t t=0; t<task->dependent_qty; ++t){
+      task->dependents[t]->mode_edit = TRUE;
+    }
+  }
+
+  // regenerate text..
+  editor_text_from_data(task_memory, text_buffer, FALSE); 
 
   // now deploy the multi-cursors! search text for keyword, add a cursor at the end of each. move the original cursor
   // TODO how to handle keywords inside of other keywords?
