@@ -1230,6 +1230,7 @@ char* text_append_string(char* text, char* addition){
 }
 
 
+// TODO rename to something better - "generate?"
 void editor_text_from_data(Task_Memory* task_memory, TextBuffer* text_buffer, uint8_t all_tasks){
   char* text = text_buffer->text;
 
@@ -1329,6 +1330,38 @@ void text_buffer_save(TextBuffer* text_buffer, char* filename){
 }
 
 
+// find one string (the needle) in another string (they haystack)
+char* strstr_n(char* haystack_start, size_t haystack_n, char* needle, size_t needle_n){
+  printf("looking for %s...\n", needle);
+
+  char* haystack = haystack_start; // current
+  char* haystack_end = haystack_start + haystack_n;
+  int done = 0;
+  while (done == 0){
+    // move the haystack to point at the first occurance of the first letter of the needle
+    haystack = memchr(haystack, (int) needle[0], haystack_end - haystack);
+    if (haystack == NULL){
+      break;
+    }
+
+    // see if the rest of the word follows
+    if (memcmp(haystack, needle, needle_n) == 0){
+      done = 1;
+      break;
+    }
+    else{
+      ++haystack;
+    }
+
+    if (haystack == haystack_end){
+      haystack = NULL;
+      break;
+    }
+  }
+
+  return haystack;
+}
+
 void editor_symbol_rename(Task_Memory* task_memory, User_Memory* user_memory, TextBuffer* text_buffer, Text_Cursor* text_cursor){
   printf("[SYMBOL RENAME] FUNCTION ACTIVATED**********************************\n");
   if (text_cursor->qty > 1){
@@ -1338,69 +1371,41 @@ void editor_symbol_rename(Task_Memory* task_memory, User_Memory* user_memory, Te
   // force parsing of the text to update the cursor stuff
   editor_parse_text(task_memory, user_memory, text_buffer, text_cursor);
 
+  char* keyword = NULL;
+  int keyword_length = 0;
+
   // if renaming task...
   if (text_cursor->entity_type == TEXTCURSOR_ENTITY_TASK){
     printf("renaming task!\n");
+    Task* task = (Task*) text_cursor->entity;
 
     // get the task name
+    keyword = task->task_name;
+    keyword_length = task->task_name_length;
+    
     // mark all related tasks in edit mode
-    // regenerate text.. put a cursor at each relevant location in edit mode
-
-    // TODO some kind of renaming text input UI! :(
-    // TODO a new viewport that appears as a header to the editor viewport?
-    // need to parse-as-you-type and update live?
-    Task* old = (Task*) text_cursor->entity;
-    assert(old != NULL);
-
-    char name_new[24];
-    size_t name_new_length = 11;
-    memcpy(name_new, "RENAME_TASK", name_new_length);
-
-    // TODO check to make sure are not going to create a task conflict
-    Task* new = task_create(task_memory, name_new, name_new_length);
-
-    // copy properties from old to new
-    new->trash = FALSE;
-    new->mode_edit = TRUE;
-    new->schedule_done = FALSE;
-    new->status_color = old->status_color;
-    new->user_qty = old->user_qty;
-    for (size_t u=0; u<new->user_qty; ++u){
-      new->users[u] = old->users[u];
+    for (size_t t=0; t<task->dependent_qty; ++t){
+      task->dependents[t]->mode_edit = TRUE;
     }
 
-    // schedule constraints
-    new->schedule_constraints = old->schedule_constraints; 
-    new->day_duration = old->day_duration;
-    new->day_start = old->day_start;
-    new->day_end = old->day_end;
-
-    // prereqs
-    new->prereq_qty = old->prereq_qty;
-    for (size_t i=0; i<old->prereq_qty; ++i){
-      new->prereqs[i] = old->prereqs[i];
-    }
-
-    // change prereqs to reference new instead of old
-    for (size_t t=0; t<task_memory->allocation_total; ++t){
-      Task* task = task_memory->tasks+t;
-      for (size_t i=0; i<task->prereq_qty; ++i){
-        if (task->prereqs[i] == old){
-          task->prereqs[i] = new;
-        }
-      }
-    }
-
-    // mark end for the old task
-    task_destroy(task_memory, old);
+    // regenerate text..
+    editor_text_from_data(task_memory, text_buffer, FALSE); 
   }
 
-  // or prereq? are these the same?
-
-  // if renaming user...
-
-  // TODO regenerate the text
-
+  // now deploy the multi-cursors! search text for keyword, add a cursor at the end of each. move the original cursor
+  // TODO how to handle keywords inside of other keywords?
+  text_cursor->qty = 0;
+  char* keyword_location = strstr_n(text_buffer->text, text_buffer->length, keyword, keyword_length);
+  while (keyword_location != NULL){
+    text_cursor->pos[text_cursor->qty] = (keyword_location - text_buffer->text) + keyword_length;
+    keyword_location = strstr_n(keyword_location + keyword_length, text_buffer->length - text_cursor->pos[text_cursor->qty], 
+                                keyword, keyword_length);
+    text_cursor->qty += 1;
+    assert(text_cursor->qty < CURSOR_QTY_MAX);
+  }
+  if (text_cursor->qty == 0){
+    editor_cursor_reset(text_cursor);
+  }
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
