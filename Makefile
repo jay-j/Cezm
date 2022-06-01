@@ -1,4 +1,4 @@
-CFLAGS = -O0 -Wall -Wextra -g
+CFLAGS = -O0 -Wall -Wextra -g -Werror
 
 # for Linux
 LIB_BUILTIN = -lSDL2 -lm -lSDL2_ttf
