@@ -169,11 +169,13 @@ void task_user_add(Task* task, User* user){
 }
 
 
-// edits task to remove user, and user to remove task
+// edits task struct to remove user pointer, and user struct to remove task pointer
 void task_user_remove(Task* task, User* user){
   size_t id = 0;
+
+  // find the user pointer in the task struct
   uint8_t found = 0;
-  for(size_t i=0; i<task->user_qty; ++i){ // TODO don't re-do the search.. we have the offset
+  for(size_t i=0; i<task->user_qty; ++i){
     if (task->users[i] == user){
       id = i;
       found = 1;
@@ -181,17 +183,15 @@ void task_user_remove(Task* task, User* user){
     }
   }
 
-  // only continue with removal process if you can find the user
+  // now shuffle down all the remaining users, update the qty
   if (found == 1){
-    
-    // now shuffle down all the remaining users, update the qty
     for (size_t i=id; i<task->user_qty-1; ++i){
       task->users[i] = task->users[i+1];
     }
     task->user_qty -= 1;
   }
 
-  // now remove the task from the user struct
+  // now remove the task pointer from the user struct
   uint8_t found2 = 0;
   for(size_t i=0; i<user->task_qty; ++i){
     if (user->tasks[i] == task){
@@ -201,8 +201,8 @@ void task_user_remove(Task* task, User* user){
     }
   }
 
+  // and shuffle down the remaining users
   if (found2 == 1){
-    // and shuffle down the remaining users
     for (size_t i=id; i<user->task_qty; ++i){
       user->tasks[i] = user->tasks[i+1];
     }
@@ -213,6 +213,7 @@ void task_user_remove(Task* task, User* user){
 }
 
 
+// look at a task, remove users you expected to see but did not
 void task_user_remove_unvisited(Task* task, User_Memory* user_memory){
   if (task->user_qty > 0){
     for (size_t u=task->user_qty; u>0; u--){
@@ -355,9 +356,9 @@ char* string_strip(int* result_length, char* str, int str_length){
 }
 
 
+// scrub through tasks, remove any that you expected to see but did not
 void editor_tasks_cleanup(Task_Memory* task_memory){
   Task* tasks = task_memory->tasks;
-  // scrub through tasks, remove any that you expected to see but did not
   for (size_t i=0; i<task_memory->allocation_total; ++i){
     if (tasks[i].trash == FALSE){ // if node is NOT trash
       if (tasks[i].mode_edit == TRUE){
