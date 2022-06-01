@@ -347,11 +347,11 @@ int schedule_task_push(Schedule_Event_List* schedule_working, Task* task, int sc
     printf("schedule error, invalid shift direction\n");
     assert(0);
   }
-  //printf("[SCHEDULER] initial guess puts task %s at day %lu - %lu\n", task->task_name, start, start+task->day_duration);
 
   // while scheduling conflict exists shift task in direction indicated by schedule_shift_dir
   task->day_start = start;
   task->day_end = task->day_start + task->day_duration - 1;
+  //printf("[SCHEDULER] initial guess puts task %s at day %lu - %lu\n", task->task_name, task->day_start, task->day_end); 
 
   size_t loop_counter = 0;
   while (schedule_conflict_detect(task) == TRUE){
@@ -387,6 +387,7 @@ int schedule_task_push(Schedule_Event_List* schedule_working, Task* task, int sc
       }
     }
   }
+  //printf("[SCHEDULER] after conflict adjustment task %s at day %lu - %lu\n", task->task_name, task->day_start, task->day_end); 
 
   // store the task solution so it can be recreated later out of the best task
   schedule_working->qty += 1;
@@ -415,7 +416,14 @@ int schedule_task_pop(Schedule_Event_List* schedule_working){
 void schedule_solve_iter(Task_Memory* task_memory, Schedule_Event_List* schedule_best, Schedule_Event_List* schedule_working){
   // quit when all tasks have been scheduled
   if (task_memory->allocation_used - schedule_working->qty == 0){
-    //printf("[SCHEDULER] ALL TASKS SCHEDULED - SUCCESS!\n");
+    /*
+    printf("[SCHEDULER] ALL TASKS SCHEDULED - SUCCESS!\n");
+    for (size_t i=0; i<task_memory->allocation_total; ++i){
+      if (task_memory->tasks[i].trash == FALSE){
+        printf("  %s from %lu to %lu\n", task_memory->tasks[i].task_name, task_memory->tasks[i].day_start, task_memory->tasks[i].day_end);
+      }
+    }
+    */
     
     // check for and save best schedule 
     schedule_working->solved = TRUE; 
@@ -550,6 +558,7 @@ int schedule_solve(Task_Memory* task_memory, Schedule_Event_List* schedule_best,
   if (schedule_best->solved == TRUE){
     for(size_t e=0; e<schedule_best->qty; ++e){
       schedule_best->events[e].task->day_start = schedule_best->events[e].date;
+      schedule_best->events[e].task->day_end = schedule_best->events[e].task->day_start + schedule_best->events[e].task->day_duration - 1;
     }
     printf("[SCHEDULER] schedule solve done: SUCCESS. time: %.3lf ms\n", cpu_timer_elapsed*1000);
     return SUCCESS;
