@@ -397,13 +397,14 @@ void editor_users_cleanup(User_Memory* user_memory){
 }
 
 
-void editor_parse_task_detect(Task_Memory* task_memory, char* text_start, size_t text_length){
+void editor_parse_task_detect(Task_Memory* task_memory, TextBuffer* text_buffer){
   printf("[STATUS] PASS 1 editor_parse_task_detect()\n");
-  char* text_end = text_start + text_length;
-  char* line_start = text_start;
+  char* text_end = text_buffer->text + text_buffer->length;
+  char* line_start = text_buffer->text;
   char* line_end;
   int line_working_length = 0;
   Task* task;
+  int line = 0;
   while (line_start < text_end){
     line_end = memchr(line_start, (int) '\n', text_end - line_start);
     if (line_end == NULL){
@@ -417,6 +418,8 @@ void editor_parse_task_detect(Task_Memory* task_memory, char* text_start, size_t
     line_working_length = line_end - line_start;
     if (line_working_length == 0){
       ++line_start;
+      text_buffer->line_task[line] = task;
+      ++line;
       continue;
     }
 
@@ -440,6 +443,9 @@ void editor_parse_task_detect(Task_Memory* task_memory, char* text_start, size_t
     }
 
     line_start = line_end + 1;
+
+    text_buffer->line_task[line] = task;
+    ++line;
   }
 }
 
@@ -564,7 +570,7 @@ void editor_parse_propertyline(Task_Memory* task_memory, User_Memory* user_memor
         if ((text_cursor->pos[0] >= property_split_start - text_buffer->text) && (text_cursor->pos[0] <= property_split_end - text_buffer->text)){
           text_cursor->entity_type = TEXTCURSOR_ENTITY_USER;
           text_cursor->entity = (void*) user;
-          printf("  [CURSOR DETECT] says cursor on user '%s'\n", user->name);
+          printf("  [CURSOR DETECT] says cursor on task '%s', user '%s'\n", task->task_name, user->name);
         }
       }
 
@@ -596,7 +602,7 @@ void editor_parse_propertyline(Task_Memory* task_memory, User_Memory* user_memor
           if ((text_cursor->pos[0] >= property_split_start - text_buffer->text) && (text_cursor->pos[0] <= property_split_end - text_buffer->text)){
             text_cursor->entity_type = TEXTCURSOR_ENTITY_PREREQ;
             text_cursor->entity = (void*) prereq;
-            printf("  [CURSOR DETECT] says cursor on prereq '%s'\n", prereq->task_name);
+            printf("  [CURSOR DETECT] says cursor on task '%s', prereq '%s'\n", task->task_name, prereq->task_name);
           }
         }
         else{
@@ -666,7 +672,7 @@ void editor_parse_text(Task_Memory* task_memory, User_Memory* user_memory, TextB
   text_cursor->entity = NULL;
 
   // PASS 1 - just add/remove tasks, mark them as visited. new tasks are marked edit_mode = TRUE
-  editor_parse_task_detect(task_memory, text_start, text_length);
+  editor_parse_task_detect(task_memory, text_buffer);
 
   // reset some properties for all tasks in the editor
   for (size_t t=0; t<task_memory->allocation_total; ++t){
@@ -942,17 +948,20 @@ TextBuffer* editor_buffer_init(){
   memset(tb->text, 0, EDITOR_BUFFER_LENGTH);
   tb->length = 0;
 
-  tb->line_length = (int*) malloc(EDITOR_LINES_MAX * sizeof(*tb->line_length));
   tb->lines = 0;
+  tb->line_task = (Task**) malloc(EDITOR_LINES_MAX * sizeof( *(tb->line_task)));
+  tb->line_length = (int*) malloc(EDITOR_LINES_MAX * sizeof(*tb->line_length));
   for (size_t i=0; i<EDITOR_LINES_MAX; ++i){
     tb->line_length[i] = 0;
   }
+
   return tb;
 }
 
 void editor_buffer_destroy(TextBuffer* tb){
   free(tb->text);
   free(tb->line_length);
+  free(tb->line_task);
 }
 
 
@@ -1000,6 +1009,7 @@ Text_Cursor* editor_cursor_create(){
   text_cursor->x   = malloc(CURSOR_QTY_MAX * sizeof(*text_cursor->x));
   text_cursor->y   = malloc(CURSOR_QTY_MAX * sizeof(*text_cursor->y));
   editor_cursor_reset(text_cursor);
+  text_cursor->task = NULL;
 
   return text_cursor;
 }
@@ -1033,6 +1043,12 @@ void editor_cursor_find_xy(TextBuffer* text_buffer, Text_Cursor* text_cursor){
     printf("pos: %d --> (x,y) = (%d, %d)\n", text_cursor->pos[index], text_cursor->x[index], text_cursor->y[index]);
   }
 
+}
+
+
+// lookup what task is pointed to by the editor mode cursor
+void editor_cursor_find_task(TextBuffer* text_buffer, Text_Cursor* text_cursor){
+  text_cursor->task = text_buffer->line_task[text_cursor->y[0]];
 }
 
 
@@ -1497,7 +1513,7 @@ int main(int argc, char* argv[]){
   size_t task_display_qty = 0;
   int display_pixels_per_day = 10; 
   int display_camera_y = 0;
-  Task* display_task_active = NULL;
+  Task_Display* display_cursor = NULL;
 
   uint8_t render_text = TRUE;
   uint8_t parse_text = TRUE;
@@ -1583,14 +1599,31 @@ int main(int argc, char* argv[]){
 
       if (keybind_viewport_mode_toggle(evt) == TRUE){
         if (viewport_active == VIEWPORT_DISPLAY){
+          printf("switch to viewport editor\n");
           viewport_active = VIEWPORT_EDITOR;
           editor_cursor_reset(text_cursor);
-          printf("switch to viewport editor\n");
           SDL_StartTextInput();
         }
         else if(viewport_active == VIEWPORT_EDITOR){
-          viewport_active = VIEWPORT_DISPLAY;
           printf("switch to display viewport\n");
+          viewport_active = VIEWPORT_DISPLAY;
+
+          display_cursor = NULL;
+          if (text_cursor->task != NULL){
+            printf("looking for task %s in display_tasks...\n", text_cursor->task->task_name);
+            // find this task in task displays. TODO not working!
+            for (size_t i=0; i<task_display_qty; ++i){
+              if (task_displays[i].task == text_cursor->task){
+                display_cursor = task_displays+i;
+                break;
+              }
+            }
+          }
+          if (display_cursor == NULL){
+            printf("task not found, defaulting to first\n");
+            display_cursor = task_displays;
+          }
+
           SDL_StopTextInput();
         }
       }
@@ -1820,7 +1853,7 @@ int main(int argc, char* argv[]){
           for (size_t i=0; i<task_display_qty; ++i){
             if ((mouse_x > task_displays[i].local.x) && (mouse_x < task_displays[i].local.x + task_displays[i].local.w)){
               if ((mouse_y > task_displays[i].local.y) && (mouse_y < task_displays[i].local.y + task_displays[i].local.h)){
-                display_task_active = task_displays[i].task;
+                display_cursor = task_displays+i;
                 task_displays[i].task->mode_edit = TRUE;
                 touched_anything = TRUE;
               }
@@ -1828,7 +1861,7 @@ int main(int argc, char* argv[]){
           }
           if (touched_anything == FALSE){
             for (size_t t=0; t<task_memory->allocation_total; ++t){
-              display_task_active = NULL;
+              display_cursor = NULL;
               task_memory->tasks[t].mode_edit = FALSE;
             }
           }
@@ -1884,7 +1917,6 @@ int main(int argc, char* argv[]){
         else if (keybind_display_select_none(evt) == TRUE){
           for (size_t t=0; t<task_memory->allocation_total; ++t){
             if (task_memory->tasks[t].trash == FALSE){
-              display_task_active = NULL;
               task_memory->tasks[t].mode_edit = FALSE;
             }
           }
@@ -2005,12 +2037,231 @@ int main(int argc, char* argv[]){
               new->prereq_qty = 1;
               new->prereqs[0] = base;
 
-              // mark
-              parse_text = TRUE;
-              display_selection_changed = TRUE;
             }
           }
+          // mark
+          parse_text = TRUE;
+          display_selection_changed = TRUE;
         } // end task create successor
+
+        // DISPLAY CURSOR NAVIGATION
+        else if (keybind_display_cursor_up(evt) == TRUE){
+          printf("try to move display cursor upward!\n");
+          
+          // get info on the current item 
+          Task* task = display_cursor->task;
+          User* user = display_cursor->user;
+          assert(user != NULL); // TODO orphaned tasks a problem!
+
+          // search over the user's tasks
+          Task* best_new = NULL;
+          for (size_t t=0; t<user->task_qty; ++t){
+            Task* candidate = user->tasks[t];
+            
+            // schedule search: find the task that has the largest end date (but still before current task)
+            if (candidate->day_end < task->day_start){
+              if (best_new == NULL){
+                best_new = candidate;
+              }
+              else if(candidate->day_end > best_new->day_end){
+                best_new = candidate;
+              }
+            }
+          }
+          // if no tasks, then don't move
+          if (best_new == NULL){
+            printf("  no task found in the upward direction\n"); 
+            continue; // next SDL event
+          }
+          printf(" the new task is %s\n", best_new->task_name);
+          
+          // then need to go from task to display task
+          for (size_t i=0; i<task_display_qty; ++i){
+            if ((task_displays[i].user == user) && (task_displays[i].task == best_new)){
+              display_cursor = task_displays+i;
+              printf("marked %lu as active\n", i); 
+              break;
+            }
+          }
+          display_selection_changed = TRUE;
+        }
+        else if (keybind_display_cursor_down(evt) == TRUE){
+          printf("try to move display cursor downward!\n");
+          printf("all of the display tasks\n");
+          for (size_t i=0; i<task_display_qty; ++i){
+            printf("  user: %s  task %s\n", task_displays[i].user->name, task_displays[i].task->task_name);
+          }
+
+          // get info on the current item 
+          Task* task = display_cursor->task;
+          User* user = display_cursor->user;
+          assert(user != NULL); // TODO orphaned tasks a problem!
+          printf("task %s goes %lu to %lu\n", task->task_name, task->day_start, task->day_end);
+
+          // search over the user's tasks
+          Task* best_new = NULL;
+          for (size_t t=0; t<user->task_qty; ++t){
+            Task* candidate = user->tasks[t];
+            printf("candidate %s goes %lu to %lu\n", candidate->task_name, candidate->day_start, candidate->day_end);
+            
+            // schedule search: find the task that has the smallest start date (but before this task end date)
+            if (candidate->day_start > task->day_end){
+              if (best_new == NULL){
+                best_new = candidate;
+              }
+              else if(candidate->day_start < best_new->day_start){
+                best_new = candidate;
+              }
+            }
+          }
+          // if no tasks, then don't move
+          if (best_new == NULL){
+            printf("  no task found in the downward direction\n"); 
+            continue; // next SDL event
+          }
+          printf(" the new task is %s\n", best_new->task_name);
+          
+          // then need to go from task to display task
+          for (size_t i=0; i<task_display_qty; ++i){
+            if ((task_displays[i].user == user) && (task_displays[i].task == best_new)){
+              display_cursor = task_displays+i;
+              printf("marked %lu as active\n", i); 
+              break;
+            }
+          }
+          display_selection_changed = TRUE;
+        }
+        
+        else if (keybind_display_cursor_left(evt) == TRUE){
+          printf("try to move left <---\n");
+          printf("all of the display tasks\n");
+          for (size_t i=0; i<task_display_qty; ++i){
+            printf("  user: %s  task %s\n", task_displays[i].user->name, task_displays[i].task->task_name);
+          }
+
+          // get info on the current item
+          Task* task = display_cursor->task;
+          int task_day_mid = (int) (task->day_start + task->day_end)/2;
+          printf("  mid point of active task '%s' is %d\n", task->task_name, task_day_mid);
+
+          User* user = display_cursor->user;
+          if (user->column_index == 0){
+            printf("  can't move, already at the extreme column\n");
+            continue;
+          }
+          size_t new_column = user->column_index - 1;
+          printf("  need to look at the new column: %lu\n", new_column);
+
+          User* user_new = NULL;
+          // Find the new user - which column is to the left?
+          for (size_t u=0; u<user_memory->allocation_total; ++u){
+            if (user_memory->users[u].trash == FALSE){
+              if (user_memory->users[u].column_index == new_column){
+                user_new = user_memory->users+u;
+                break;
+              }
+            }
+          }
+          if (user_new == NULL){
+            continue; // next SDL event
+          }
+          printf("  the new user is %s\n", user_new->name);
+
+          // search tasks belonging to the new user for the task that is closest
+          Task* task_new_best = NULL;
+          int error_best = 0;
+          for (size_t t=0; t<user_new->task_qty; ++t){
+            Task* candidate = user_new->tasks[t];
+            int mid2 = (int) (candidate->day_start + candidate->day_end)/2; // midpoint comparison.. TODO better?
+            int error = abs(mid2 - task_day_mid);
+            printf("    candidate task %s has midpoint %d (error %d)\n", candidate->task_name, mid2, error);
+            if (task_new_best == NULL){
+              task_new_best = candidate;
+              error_best = error;
+            }
+            else if (error < error_best){
+              task_new_best = candidate;
+              error_best = error;
+            }
+          }
+          assert(task_new_best != NULL);
+
+          // now go from task to display task
+          for (size_t i=0; i<task_display_qty; ++i){
+            if ((task_displays[i].user == user_new) && (task_displays[i].task == task_new_best)){
+              display_cursor = task_displays+i;
+              printf("  marked %lu as active\n", i); 
+              break;
+            }
+          }
+          display_selection_changed = TRUE;
+        }
+        else if (keybind_display_cursor_right(evt) == TRUE){
+          printf("try to move right --->\n");
+
+          // get info on the current item
+          Task* task = display_cursor->task;
+          int task_day_mid = (int) (task->day_start + task->day_end)/2;
+          printf("  mid point of active task '%s' is %d\n", task->task_name, task_day_mid);
+
+          User* user = display_cursor->user;
+          if (user->column_index == user_memory->allocation_used){ // TODO has a problem with nouser tasks
+            printf("  can't move, already at the extreme column (%lu)\n", user->column_index);
+            continue;
+          }
+          size_t new_column = user->column_index + 1;
+          printf("  need to look at the new column: %lu\n", new_column);
+
+          User* user_new = NULL;
+          // Find the new user - which column matches 
+          for (size_t u=0; u<user_memory->allocation_total; ++u){
+            if (user_memory->users[u].trash == FALSE){
+              if (user_memory->users[u].column_index == new_column){
+                user_new = user_memory->users+u;
+                break;
+              }
+            }
+          }
+          if (user_new == NULL){
+            continue; // next SDL event
+          }
+          printf("  the new user is %s\n", user_new->name);
+
+          // search tasks belonging to the new user for the task that is closest
+          Task* task_new_best = NULL;
+          int error_best = 0;
+          for (size_t t=0; t<user_new->task_qty; ++t){
+            Task* candidate = user_new->tasks[t];
+            int mid2 = (int) (candidate->day_start + candidate->day_end)/2; // midpoint comparison.. TODO better?
+            int error = abs(mid2 - task_day_mid);
+            printf("    candidate task %s has midpoint %d (error %d)\n", candidate->task_name, mid2, error);
+            if (task_new_best == NULL){
+              task_new_best = candidate;
+              error_best = error;
+            }
+            else if (error < error_best){
+              task_new_best = candidate;
+              error_best = error;
+            }
+          }
+          assert(task_new_best != NULL);
+
+          // now go from task to display task
+          for (size_t i=0; i<task_display_qty; ++i){
+            if ((task_displays[i].user == user_new) && (task_displays[i].task == task_new_best)){
+              display_cursor = task_displays+i;
+              printf("  marked %lu as active\n", i); 
+              break;
+            }
+          }
+          display_selection_changed = TRUE;
+        }
+
+        else if (keybind_display_cursor_selection_toggle(evt) == TRUE){
+          display_cursor->task->mode_edit = !display_cursor->task->mode_edit;
+          display_selection_changed = TRUE;
+        }
+        
          
       } // viewport display
 
@@ -2106,7 +2357,8 @@ int main(int argc, char* argv[]){
             if (task->user_qty > 0){  
               for (size_t u=0; u<task->user_qty; ++u){
                 task_displays[task_display_qty].task = task;
-                task_displays[task_display_qty].column = task->users[u]->column_center_px;
+                task_displays[task_display_qty].column_px = task->users[u]->column_center_px;
+                task_displays[task_display_qty].user = task->users[u];
                 for(size_t p=0; p<task->prereq_qty; ++p){ 
                   Task* prereq = task->prereqs[p];
                   prereq->dependents_display[prereq->dependents_display_qty] = &task_displays[task_display_qty];
@@ -2117,7 +2369,8 @@ int main(int argc, char* argv[]){
             }
             else{
               task_displays[task_display_qty].task = task;
-              task_displays[task_display_qty].column = nouser_column_center_px;
+              task_displays[task_display_qty].column_px = nouser_column_center_px;
+              task_displays[task_display_qty].user = NULL;
               for(size_t p=0; p<task->prereq_qty; ++p){ 
                 Task* prereq = task->prereqs[p];
                 prereq->dependents_display[prereq->dependents_display_qty] = &task_displays[task_display_qty];
@@ -2130,6 +2383,31 @@ int main(int argc, char* argv[]){
         }
       }
     } // end parse text & schedule
+
+    /////////////////////////////// CURSOR MANAGEMENT //////////////////////////////////////////
+
+    // display cursor jumps around to follow editor
+    if (viewport_active == VIEWPORT_EDITOR){
+      editor_cursor_find_task(text_buffer, text_cursor);
+      if (text_cursor->task != NULL){
+        for (size_t i=0; i<task_display_qty; ++i){
+          if (task_displays[i].task == text_cursor->task){
+            display_cursor = task_displays+i;
+            break;
+          }
+        }
+      }
+    }
+
+    // editor cursor jumps around to follow display
+    else if (viewport_active == VIEWPORT_DISPLAY){
+      for (int i=0; i<text_buffer->lines; ++i){
+        if (text_buffer->line_task[i] == display_cursor->task){
+          text_cursor->y[0] = i;
+          break;
+        }
+      }
+    }
 
     /////////////////////////////// SECTION RENDERING //////////////////////////////////////////
     // clear screen
@@ -2166,23 +2444,25 @@ int main(int argc, char* argv[]){
           line[text_buffer->line_length[line_number]-1] = '\0';
 
           // cursor drawing!
-          if (viewport_active == VIEWPORT_EDITOR){
-            if (text_cursor->qty == 1){
-              if ((text_cursor->pos[0] >= line_start - text_buffer->text) && (text_cursor->pos[0] < line_end - text_buffer->text)){
-                // draw a shaded background
-                SDL_Rect cursor_line_background = {
-                  .x = 0,
-                  .y = line_height_offset,
-                  .w = viewport_editor.w, 
-                  .h = 20
-                }; // TODO need to have a font line height as independent variable!
-                SDL_SetRenderDrawColor(render, 230, 230, 230, 255);
-                SDL_RenderFillRect(render, &cursor_line_background);
-              }
+          if (text_cursor->qty == 1){
+            //if ((text_cursor->pos[0] >= line_start - text_buffer->text) && (text_cursor->pos[0] < line_end - text_buffer->text)){
+            if (text_cursor->y[0] == line_number){
+              // draw a shaded background
+              SDL_Rect cursor_line_background = {
+                .x = 0,
+                .y = line_height_offset,
+                .w = viewport_editor.w, 
+                .h = 20
+              }; // TODO need to have a font line height as independent variable!
+              SDL_SetRenderDrawColor(render, 255, 230, 230, 255);
+              SDL_RenderFillRect(render, &cursor_line_background);
             }
+          }
 
+          if (viewport_active == VIEWPORT_EDITOR){
             for (size_t i=0; i<text_cursor->qty; ++i){
-              if ((text_cursor->pos[i] >= line_start - text_buffer->text) && (text_cursor->pos[i] < line_end - text_buffer->text)){
+              //if ((text_cursor->pos[i] >= line_start - text_buffer->text) && (text_cursor->pos[i] < line_end - text_buffer->text)){
+              if (text_cursor->y[i] == line_number){
 
               // find the location within the line?
               // TODO need to reference this to actual glyph widths!!
@@ -2299,7 +2579,27 @@ int main(int argc, char* argv[]){
       }
     }
 
-    // TODO DRAW the keyboard cursor for display mode
+    // DRAW the keyboard cursor for display mode
+    {
+      SDL_RenderSetViewport(render, &viewport_display_body);
+      SDL_SetRenderDrawColor(render, 0xA0, 0x00, 0x00, 0xFF);
+      
+      if (display_cursor != NULL){
+        SDL_Rect horiz;
+        horiz.x = 0;
+        horiz.w = viewport_display_body.w;
+        horiz.h = 4;
+        horiz.y = display_cursor->local.y + display_cursor->local.h/2 - horiz.h/2;
+        SDL_RenderFillRect(render, &horiz);
+
+        SDL_Rect vert;
+        vert.w = horiz.h;
+        vert.x = display_cursor->local.x + display_cursor->local.w/2 - vert.w/2;
+        vert.y = 0;
+        vert.h = viewport_display_body.h;
+        SDL_RenderFillRect(render, &vert);
+      }
+    }
 
     // DRAW THE TASKS AND RELATION CURVES
     if (task_memory->allocation_used > 0){      
@@ -2309,7 +2609,7 @@ int main(int argc, char* argv[]){
       for (size_t i=0; i<task_display_qty; ++i){
         Task_Display* td = task_displays + i;
         td->global.w = 180;
-        td->global.x = td->column - td->global.w / 2;
+        td->global.x = td->column_px - td->global.w / 2;
         td->global.y = display_pixels_per_day*(td->task->day_start - day_project_start);
         td->global.h = display_pixels_per_day*(td->task->day_duration); // TODO account for weekends
 
@@ -2342,7 +2642,6 @@ int main(int argc, char* argv[]){
           draw_dependency_curve(render, start_x, start_y, end_x, end_y);
           draw_dependency_curve(render, start_x+1, start_y, end_x+1, end_y);
           draw_dependency_curve(render, start_x-1, start_y, end_x-1, end_y);
-
         }
       }
 
