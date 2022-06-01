@@ -99,7 +99,9 @@ typedef struct Task_Memory{
 
 struct Task_Display{
   Task* task;
-  int column; // aka.. which user
+  User* user;
+  //int column_index; // aka.. which user
+  int column_px; 
   SDL_Rect global;
   SDL_Rect local;
 };
@@ -169,6 +171,7 @@ typedef struct TextBuffer{
   int length;
   int* line_length; // [pointer to lineA start] + [line_length A] = [pointer to lineB start]
   int lines;
+  Task** line_task; // pointer to what task this line corresponds to
 } TextBuffer;
 
 typedef struct Text_Cursor{
@@ -178,6 +181,7 @@ typedef struct Text_Cursor{
   int* y;
   uint8_t entity_type;
   void* entity;
+  Task* task;
 } Text_Cursor;
 
 enum TEXTCURSOR_MOVE_DIR {

@@ -51,6 +51,41 @@ uint8_t keybind_editor_symbol_rename(SDL_Event evt){
 
 //// display mode keybindings ////
 
+uint8_t keybind_display_cursor_left(SDL_Event evt){
+  if (evt.key.keysym.sym == SDLK_h && evt.type == SDL_KEYDOWN){
+    return TRUE;
+  }
+  return FALSE;
+}
+
+uint8_t keybind_display_cursor_down(SDL_Event evt){
+  if (evt.key.keysym.sym == SDLK_j && evt.type == SDL_KEYDOWN){
+    return TRUE;
+  }
+  return FALSE;
+}
+
+uint8_t keybind_display_cursor_up(SDL_Event evt){
+  if (evt.key.keysym.sym == SDLK_k && evt.type == SDL_KEYDOWN){
+    return TRUE;
+  }
+  return FALSE;
+}
+
+uint8_t keybind_display_cursor_right(SDL_Event evt){
+  if (evt.key.keysym.sym == SDLK_l && evt.type == SDL_KEYDOWN){
+    return TRUE;
+  }
+  return FALSE;
+}
+
+uint8_t keybind_display_cursor_selection_toggle(SDL_Event evt){
+  if (evt.key.keysym.sym == SDLK_f && evt.type == SDL_KEYDOWN){
+    return TRUE;
+  }
+  return FALSE;
+}
+
 uint8_t keybind_display_camera_time_zoom_in(SDL_Event evt){
   if (evt.key.keysym.sym == SDLK_EQUALS){ //the plus key on us keyboards
     return TRUE;
