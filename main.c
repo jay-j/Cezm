@@ -1591,7 +1591,7 @@ int main(int argc, char* argv[]){
         // load file contents into the editor text buffer, this will also parse the file
         editor_load_text(task_memory, user_memory, text_buffer, argv[1], text_cursor);
         parse_text = TRUE; // because load doesn't try a schedule solve
-        render_text = 1;
+        render_text = TRUE;
 
         viewport_active = VIEWPORT_EDITOR;
         editor_cursor_reset(text_cursor);
@@ -1654,7 +1654,7 @@ int main(int argc, char* argv[]){
               // now move this cursor left for the backspace action
               text_cursor->pos[i] -= 1;
             }
-            render_text = 1;
+            render_text = TRUE;
             parse_text = TRUE;
           }
           else if( evt.key.keysym.sym == SDLK_DELETE && text_buffer->length > 0){
@@ -1673,7 +1673,7 @@ int main(int argc, char* argv[]){
               text_buffer->text[text_buffer->length] = '\0';
               text_buffer->line_length[text_cursor->y[i]] -= 1; // TODO what if line length is already zero??
             }
-            render_text = 1;
+            render_text = TRUE;
             parse_text = TRUE;
           }
           // handle copy?
@@ -1685,7 +1685,7 @@ int main(int argc, char* argv[]){
           //handle paste
           else if( evt.key.keysym.sym == SDLK_v && SDL_GetModState() & KMOD_CTRL){
             // text_buffer = SDL_GetClipboardText();
-            //render_text = 1;
+            //render_text = TRUE;
             // TODO need to update length! 
             printf("paste!\n");
           }
@@ -1708,7 +1708,7 @@ int main(int argc, char* argv[]){
               ++text_buffer->length;
               text_cursor->pos[i] += 1;
             }
-            render_text = 1;
+            render_text = TRUE;
             parse_text = TRUE;
 
             printf("[INSERT] RETURN\n"); 
@@ -1798,7 +1798,7 @@ int main(int argc, char* argv[]){
             editor_cursor_move(text_buffer, text_cursor, i, TEXTCURSOR_MOVE_DIR_RIGHT);
           }
 
-          render_text = 1;
+          render_text = TRUE;
           parse_text = TRUE;
 
         }
@@ -1989,10 +1989,11 @@ int main(int argc, char* argv[]){
                   }
                 }
               }
-              parse_text = TRUE;
-              display_selection_changed = TRUE;
             }
           } // end duplication of all tasks in edit mode
+
+          parse_text = TRUE;
+          display_selection_changed = TRUE;
         } // end task split 
 
         else if (keybind_display_task_create_successor(evt)){
@@ -2325,7 +2326,6 @@ int main(int argc, char* argv[]){
         size_t user_column_count = 1;
         int user_column_loc = user_column_increment + user_column_increment / 2;
         if (orphaned_tasks == FALSE){
-          printf("orphaned tasks == FALSE\n");
           user_column_increment = viewport_display.w / (user_memory->allocation_used);
           user_column_count = 0;
           user_column_loc = user_column_increment / 2;
@@ -2425,7 +2425,8 @@ int main(int argc, char* argv[]){
     SDL_RenderFillRect(render, &viewport_editor);
     
     // text rendering, and figure out where the cursor is
-    if (1 == 1){ // TODO if (render_text == 1)
+    assert(render_text < 2); // TODO suppress warning about unused variable for this one
+    if (1 == 1){ // TODO if (render_text == TRUE)
       if (text_buffer->length > 0){
         
         char* line_start = text_buffer->text;
@@ -2680,5 +2681,5 @@ int main(int argc, char* argv[]){
   schedule_free(schedule_working);
   free(task_displays); 
   editor_cursor_destroy(text_cursor);
- return 0;
+  return 0;
 }
