@@ -1951,9 +1951,9 @@ int main(int argc, char* argv[]){
               new->mode_edit = TRUE;
               new->schedule_done = FALSE;
               new->status_color = base->status_color;
-              new->user_qty = base->user_qty;
-              for (size_t u=0; u<new->user_qty; ++u){
-                new->users[u] = base->users[u];
+              new->user_qty = 0; 
+              for (size_t u=0; u<base->user_qty; ++u){
+                task_user_add(new, base->users[u]);
               }
 
               // figure out schedule constraints, start with duration
@@ -2025,9 +2025,9 @@ int main(int argc, char* argv[]){
               new->mode_edit = TRUE;
               new->schedule_done = FALSE;
               new->status_color = base->status_color;
-              new->user_qty = base->user_qty;
-              for (size_t u=0; u<new->user_qty; ++u){
-                new->users[u] = base->users[u];
+              new->user_qty = 0;
+              for (size_t u=0; u<base->user_qty; ++u){
+                task_user_add(new, base->users[u]);
               }
 
               // schedule constraints
