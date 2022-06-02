@@ -1154,7 +1154,7 @@ void editor_cursor_move(TextBuffer* tb, Text_Cursor* tc, size_t index, int moved
 
       int x_delta = tc->x[index];
       // moving on to a shorter line
-      if (tc->x[index] > tb->line_length[tc->y[index]]){
+      if (tc->x[index] >= tb->line_length[tc->y[index]]){
         tc->x[index] = tb->line_length[tc->y[index]]-1;
         tc->pos[index] -= x_delta + 1;
       }
@@ -1171,7 +1171,7 @@ void editor_cursor_move(TextBuffer* tb, Text_Cursor* tc, size_t index, int moved
       tc->y[index] += 1;
 
       // moving onto a shorter line
-      if (tc->x[index] > tb->line_length[tc->y[index]]){
+      if (tc->x[index] >= tb->line_length[tc->y[index]]){
         tc->x[index] = tb->line_length[tc->y[index]]-1;
       }
         
@@ -2519,6 +2519,25 @@ int main(int argc, char* argv[]){
         sdlj_textbox_render(render, &editor_textbox, " ");
       }
     } // endif request re-render text
+
+    // render editor cursor location debugging
+    {
+      SDL_RenderSetViewport(render, &viewport_editor);
+      char cursor_string[32];
+      sprintf(cursor_string, "%d --> (%d, %d)", text_cursor->pos[0], text_cursor->x[0], text_cursor->y[0]);
+      
+      TextBox editor_cursor_debug_textbox;
+      editor_cursor_debug_textbox.color.r = 0; editor_cursor_debug_textbox.color.g = 0;
+      editor_cursor_debug_textbox.color.b = 0; editor_cursor_debug_textbox.color.a = 0xFF;
+      editor_cursor_debug_textbox.texture = NULL;
+
+      sdlj_textbox_render(render, &editor_cursor_debug_textbox, cursor_string);
+
+      SDL_Rect src = {0, 0, editor_cursor_debug_textbox.width, editor_cursor_debug_textbox.height}; 
+      SDL_Rect dst = {0, viewport_editor.h - editor_cursor_debug_textbox.height, src.w, src.h};
+
+      assert(SDL_RenderCopy(render, editor_cursor_debug_textbox.texture, &src, &dst) == 0);
+    }
 
 
     SDL_RenderSetViewport(render, &viewport_display);
