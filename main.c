@@ -1029,24 +1029,25 @@ void editor_cursor_destroy(Text_Cursor* text_cursor){
 
 // given pos, find xy at all indexes. shows a problem with 0/1 length lines?
 void editor_cursor_find_xy(TextBuffer* text_buffer, Text_Cursor* text_cursor){
-
-  // assume that incoming points are sorted - verify with assertions
-
   // advance until we find the xy for the first one
   // then keep advancing but look for the next one
 
   int line = 0;
   int sum = text_buffer->line_length[line];
   for (size_t index=0; index<text_cursor->qty; ++index){
-    while (sum < text_cursor->pos[index]){ // add to the end of the line (after the cursor)
+    while (sum <= text_cursor->pos[index]){ // add to the end of the line (after the cursor)
       line += 1;
       sum += text_buffer->line_length[line];
     }
     text_cursor->y[index] = line;
     text_cursor->x[index] = text_buffer->line_length[line] - (sum - text_cursor->pos[index]);
     printf("pos: %d --> (x,y) = (%d, %d)\n", text_cursor->pos[index], text_cursor->x[index], text_cursor->y[index]);
-  }
 
+    // check assumption of cursor ordering
+    if (index > 0){
+      assert(text_cursor->pos[index] > text_cursor->pos[index-1]);
+    }
+  }
 }
 
 
@@ -2452,7 +2453,6 @@ int main(int argc, char* argv[]){
 
           // cursor drawing!
           if (text_cursor->qty == 1){
-            //if ((text_cursor->pos[0] >= line_start - text_buffer->text) && (text_cursor->pos[0] < line_end - text_buffer->text)){
             if (text_cursor->y[0] == line_number){
               // draw a shaded background
               SDL_Rect cursor_line_background = {
@@ -2468,7 +2468,6 @@ int main(int argc, char* argv[]){
 
           if (viewport_active == VIEWPORT_EDITOR){
             for (size_t i=0; i<text_cursor->qty; ++i){
-              //if ((text_cursor->pos[i] >= line_start - text_buffer->text) && (text_cursor->pos[i] < line_end - text_buffer->text)){
               if (text_cursor->y[i] == line_number){
 
               // find the location within the line?
@@ -2530,12 +2529,10 @@ int main(int argc, char* argv[]){
       editor_cursor_debug_textbox.color.r = 0; editor_cursor_debug_textbox.color.g = 0;
       editor_cursor_debug_textbox.color.b = 0; editor_cursor_debug_textbox.color.a = 0xFF;
       editor_cursor_debug_textbox.texture = NULL;
-
       sdlj_textbox_render(render, &editor_cursor_debug_textbox, cursor_string);
 
       SDL_Rect src = {0, 0, editor_cursor_debug_textbox.width, editor_cursor_debug_textbox.height}; 
       SDL_Rect dst = {0, viewport_editor.h - editor_cursor_debug_textbox.height, src.w, src.h};
-
       assert(SDL_RenderCopy(render, editor_cursor_debug_textbox.texture, &src, &dst) == 0);
     }
 
