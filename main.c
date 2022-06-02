@@ -123,6 +123,7 @@ Task* task_create(Task_Memory* task_memory, char* task_name, size_t task_name_le
   task->trash = FALSE;
   task->task_name_length = task_name_length;
   task->mode_edit = TRUE; 
+  task->mode_edit_temp = FALSE;
   
   // add to hash table
   char* name = (char*) malloc(task_name_length+1);
@@ -1255,16 +1256,20 @@ char* text_append_string(char* text, char* addition){
 // TODO rename to something better - "generate?"
 void editor_text_from_data(Task_Memory* task_memory, TextBuffer* text_buffer, uint8_t all_tasks){
   char* text = text_buffer->text;
+  int line_number = 0;
 
   // Fill the new one
   for (size_t t=0; t<task_memory->allocation_total; ++t){
     Task* task = task_memory->tasks + t;
     if (task->trash == FALSE){
-      if ((task->mode_edit == TRUE) || (all_tasks == TRUE)){
+      if ((task->mode_edit == TRUE) || (task->mode_edit_temp == TRUE) || (all_tasks == TRUE)){
         // task name
         memcpy(text, task->task_name, task->task_name_length);
         text += task->task_name_length;
         text = text_append_string(text, " {\n");
+
+        text_buffer->line_task[line_number] = task;
+        ++line_number;
 
         // duration
         if ((task->schedule_constraints & SCHEDULE_CONSTRAINT_DURATION) > 0){
@@ -1274,6 +1279,9 @@ void editor_text_from_data(Task_Memory* task_memory, TextBuffer* text_buffer, ui
           assert(result > 0);
           text += length;
           text = text_append_char(text, '\n');
+
+          text_buffer->line_task[line_number] = task;
+          ++line_number;
         }
           
         // prereqs (dependency)
@@ -1287,6 +1295,9 @@ void editor_text_from_data(Task_Memory* task_memory, TextBuffer* text_buffer, ui
           }
           text -= 2;
           text = text_append_char(text, '\n');
+
+          text_buffer->line_task[line_number] = task;
+          ++line_number;
         }
         
         // users
@@ -1300,6 +1311,9 @@ void editor_text_from_data(Task_Memory* task_memory, TextBuffer* text_buffer, ui
           }
           text -= 2;
           text = text_append_char(text, '\n');
+
+          text_buffer->line_task[line_number] = task;
+          ++line_number;
         }
 
         // fixed dates
@@ -1307,11 +1321,17 @@ void editor_text_from_data(Task_Memory* task_memory, TextBuffer* text_buffer, ui
           text = text_append_string(text, "  fixed_start: ");
           text = text_append_date(text, task->day_start);
           text = text_append_char(text, '\n');
+
+          text_buffer->line_task[line_number] = task;
+          ++line_number;
         }
         if ((task->schedule_constraints & SCHEDULE_CONSTRAINT_END) > 0){
           text = text_append_string(text, "  fixed_end: ");
           text = text_append_date(text, task->day_end);
           text = text_append_char(text, '\n');
+
+          text_buffer->line_task[line_number] = task;
+          ++line_number;
         }
 
         // color
@@ -1322,14 +1342,21 @@ void editor_text_from_data(Task_Memory* task_memory, TextBuffer* text_buffer, ui
           assert(result > 0);
           text += length;
           text = text_append_char(text, '\n');
+
+          text_buffer->line_task[line_number] = task;
+          ++line_number;
         }
 
         // end this task
         text = text_append_string(text, "}\n");
+
+        text_buffer->line_task[line_number] = task;
+        ++line_number;
       }
     }
   }
   text_buffer->length = text - text_buffer->text;
+  text_buffer->lines = line_number;
 
   if (text_buffer->length == 0){
     text_buffer->text[0] = ' ';
@@ -1498,6 +1525,14 @@ int main(int argc, char* argv[]){
   TextBox editor_textbox;
   editor_textbox.color.r = 0; editor_textbox.color.g = 0; editor_textbox.color.b = 0; editor_textbox.color.a = 0xFF;
   editor_textbox.texture = NULL;
+
+  TextBox editor_textbox_draft;
+  editor_textbox_draft.color.r = 100;
+  editor_textbox_draft.color.g = 100;
+  editor_textbox_draft.color.b = 100;
+  editor_textbox_draft.color.a = 0xFF;
+  editor_textbox_draft.texture = NULL;
+  
   Text_Cursor* text_cursor = editor_cursor_create();
 
   TextBox name_textbox;
@@ -1558,6 +1593,7 @@ int main(int argc, char* argv[]){
     viewport_display_body.h = viewport_display.h - viewport_display_header.h;
 
     editor_textbox.width_max = viewport_editor.w;
+    editor_textbox_draft.width_max = viewport_editor.w;
     name_textbox.width_max = window_width * 0.75;
 
     // INPUT
@@ -1607,6 +1643,9 @@ int main(int argc, char* argv[]){
           printf("switch to viewport editor\n");
           viewport_active = VIEWPORT_EDITOR;
           editor_cursor_reset(text_cursor);
+          for (size_t t=0; t<task_memory->allocation_total; ++t){
+            task_memory->tasks[t].mode_edit_temp = FALSE;
+          }
           SDL_StartTextInput();
         }
         else if(viewport_active == VIEWPORT_EDITOR){
@@ -1761,9 +1800,14 @@ int main(int argc, char* argv[]){
             display_selection_changed = TRUE;
           }
           else if (evt.key.keysym.sym == SDLK_F4){ // TODO HACK start things
-            text_cursor->pos[text_cursor->qty] = text_cursor->pos[text_cursor->qty-1] + 20;
-            text_cursor->qty += 1;
-            editor_cursor_sort(text_buffer, text_cursor);
+            printf("line lengths:\n");
+            for (int i=0; i<text_buffer->lines; ++i){
+              printf("%d: %d\n", i, text_buffer->line_length[i]);
+
+            }
+            //text_cursor->pos[text_cursor->qty] = text_cursor->pos[text_cursor->qty-1] + 20;
+            //text_cursor->qty += 1;
+            //editor_cursor_sort(text_buffer, text_cursor);
           }
           else if (evt.key.keysym.sym == SDLK_F5){
             printf("updating xy coordinates of all cursors\n");
@@ -2080,6 +2124,8 @@ int main(int argc, char* argv[]){
             continue; // next SDL event
           }
           printf(" the new task is %s\n", best_new->task_name);
+          task->mode_edit_temp = FALSE;
+          best_new->mode_edit_temp = TRUE;
           
           // then need to go from task to display task
           for (size_t i=0; i<task_display_qty; ++i){
@@ -2126,6 +2172,8 @@ int main(int argc, char* argv[]){
             continue; // next SDL event
           }
           printf(" the new task is %s\n", best_new->task_name);
+          task->mode_edit_temp = FALSE;
+          best_new->mode_edit_temp = TRUE;
           
           // then need to go from task to display task
           for (size_t i=0; i<task_display_qty; ++i){
@@ -2191,6 +2239,8 @@ int main(int argc, char* argv[]){
             }
           }
           assert(task_new_best != NULL);
+          task->mode_edit_temp = FALSE;
+          task_new_best->mode_edit_temp = TRUE;
 
           // now go from task to display task
           for (size_t i=0; i<task_display_qty; ++i){
@@ -2251,6 +2301,8 @@ int main(int argc, char* argv[]){
             }
           }
           assert(task_new_best != NULL);
+          task->mode_edit_temp = FALSE;
+          task_new_best->mode_edit_temp = TRUE;
 
           // now go from task to display task
           for (size_t i=0; i<task_display_qty; ++i){
@@ -2487,7 +2539,8 @@ int main(int argc, char* argv[]){
             } 
           } // cursor drawing
 
-          // don't try to render if it is a blank line. TODO make sure the height gets more offset
+          // render a line of text! except if it is blank
+          // TODO make sure the height gets more offset
           if (text_buffer->line_length[line_number] > 1){
             
             // need to just make a big texture, since this has to be SDL_RenderCopy() every frame TODO
@@ -2495,10 +2548,18 @@ int main(int argc, char* argv[]){
             // https://gamedev.stackexchange.com/questions/46238/rendering-multiline-text-with-sdl-ttf
 
             // render the line!
-            sdlj_textbox_render(render, &editor_textbox, line);
-            SDL_Rect src = {0, 0, editor_textbox.width, editor_textbox.height};
-            SDL_Rect dst = {0, line_height_offset, editor_textbox.width, editor_textbox.height};
-            assert(SDL_RenderCopy(render, editor_textbox.texture, &src, &dst) == 0);
+            if ((text_buffer->line_task[line_number]->mode_edit_temp == FALSE) || (text_buffer->line_task[line_number]->mode_edit == TRUE)){
+              sdlj_textbox_render(render, &editor_textbox, line);
+              SDL_Rect src = {0, 0, editor_textbox.width, editor_textbox.height};
+              SDL_Rect dst = {0, line_height_offset, editor_textbox.width, editor_textbox.height};
+              assert(SDL_RenderCopy(render, editor_textbox.texture, &src, &dst) == 0);
+            }
+            else{
+              sdlj_textbox_render(render, &editor_textbox_draft, line);
+              SDL_Rect src = {0, 0, editor_textbox_draft.width, editor_textbox_draft.height};
+              SDL_Rect dst = {0, line_height_offset, editor_textbox_draft.width, editor_textbox_draft.height};
+              assert(SDL_RenderCopy(render, editor_textbox_draft.texture, &src, &dst) == 0);
+            }
             line_height_offset += editor_textbox.height;
           }
           else{ // put gaps where lines are blank

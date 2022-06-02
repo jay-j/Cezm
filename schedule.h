@@ -62,6 +62,7 @@ struct Task{
   size_t task_name_length;
   uint8_t trash;
   uint8_t mode_edit;
+  uint8_t mode_edit_temp;
   uint8_t schedule_done;
 
   User* users[TASK_USERS_MAX];
