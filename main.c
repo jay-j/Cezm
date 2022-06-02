@@ -408,7 +408,7 @@ void editor_parse_task_detect(Task_Memory* task_memory, Text_Buffer* text_buffer
   char* line_start = text_buffer->text;
   char* line_end;
   int line_working_length = 0;
-  Task* task;
+  Task* task = NULL;
   int line = 0;
   while (line_start < text_end){
     line_end = memchr(line_start, (int) '\n', text_end - line_start);
@@ -1126,8 +1126,7 @@ void editor_cursor_sort(Text_Buffer* text_buffer, Text_Cursor* text_cursor){
 // move one cursor by the given amount
 void editor_cursor_move(Text_Buffer* tb, Text_Cursor* tc, size_t index, int movedir){
   if (movedir == TEXTCURSOR_MOVE_DIR_RIGHT){
-    if (tc->pos[index] < tb->length){
-      // TODO if allowed by length
+    if (tc->pos[index] < tb->length-1){
       tc->pos[index] += 1;
       tc->x[index] += 1;
       
@@ -1168,7 +1167,7 @@ void editor_cursor_move(Text_Buffer* tb, Text_Cursor* tc, size_t index, int move
     }
   }
   else if (movedir == TEXTCURSOR_MOVE_DIR_DOWN){
-    if (tc->y[index] < tb->lines){
+    if (tc->y[index] < tb->lines-1){
       int x_delta = tb->line_length[tc->y[index]] - tc->x[index];
       tc->y[index] += 1;
 
@@ -1192,10 +1191,7 @@ void editor_cursor_move(Text_Buffer* tb, Text_Cursor* tc, size_t index, int move
     }
   }
 
-printf("move index %lu in direction %d\n", index, movedir);
-
-  // TODO is this the best?
-//editor_cursor_find_xy(tb, tc, index);
+  printf("move index %lu in direction %d\n", index, movedir);
 }
 
 
@@ -1655,7 +1651,6 @@ int main(int argc, char* argv[]){
           display_cursor = NULL;
           if (text_cursor->task != NULL){
             printf("looking for task %s in display_tasks...\n", text_cursor->task->task_name);
-            // find this task in task displays. TODO not working!
             for (size_t i=0; i<task_display_qty; ++i){
               if (task_displays[i].task == text_cursor->task){
                 display_cursor = task_displays+i;
@@ -1676,7 +1671,6 @@ int main(int argc, char* argv[]){
         
         // special key input
         // TODO cursor management, underline corner style
-        // TODO multi-cursor
         if (evt.type == SDL_KEYDOWN){
           if (evt.key.keysym.sym == SDLK_BACKSPACE && text_buffer->length > 0){
             for (size_t i=0; i<text_cursor->qty; ++i){
@@ -1693,7 +1687,7 @@ int main(int argc, char* argv[]){
 
               --text_buffer->length;
               text_buffer->text[text_buffer->length] = '\0';
-              text_buffer->line_length[text_cursor->y[i]] -= 1; // TODO what if line length is already zero??
+              text_buffer->line_length[text_cursor->y[i]] -= 1;
 
               // now move this cursor left for the backspace action
               text_cursor->pos[i] -= 1;
@@ -1715,7 +1709,7 @@ int main(int argc, char* argv[]){
 
               --text_buffer->length;
               text_buffer->text[text_buffer->length] = '\0';
-              text_buffer->line_length[text_cursor->y[i]] -= 1; // TODO what if line length is already zero??
+              text_buffer->line_length[text_cursor->y[i]] -= 1;
             }
             render_text = TRUE;
             parse_text = TRUE;
@@ -1741,7 +1735,6 @@ int main(int argc, char* argv[]){
               }
 
               // move text to make space for inserting characters
-              // TODO verify adding text at the end
               char* text_src = text_buffer->text + text_cursor->pos[i];
               char* text_dst = text_src + 1;
               char* text_end = text_buffer->text + text_buffer->length;
@@ -1830,10 +1823,8 @@ int main(int argc, char* argv[]){
             }
             int pos = text_cursor->pos[i]; // account for previous additions
             printf("adding character '%c' at %d\n", evt.text.text[0], pos); 
-            // TODO fix first new character.. it needs a 
 
             // move text to make space for inserting characters
-            // TODO verify adding text at the end
             char* text_src = text_buffer->text + pos; 
             char* text_dst = text_src + 1;
             char* text_end = text_buffer->text + text_buffer->length;
@@ -2546,9 +2537,15 @@ int main(int argc, char* argv[]){
             // need to just make a big texture, since this has to be SDL_RenderCopy() every frame TODO
             // https://stackoverflow.com/questions/40886350/how-to-connect-multiple-textures-in-the-one-in-sdl2
             // https://gamedev.stackexchange.com/questions/46238/rendering-multiline-text-with-sdl-ttf
+            int color_draft = 0;
+            if (text_buffer->line_task[line_number] != NULL){
+              if ((text_buffer->line_task[line_number]->mode_edit_temp == FALSE) || (text_buffer->line_task[line_number]->mode_edit == TRUE)){
+                color_draft = 1;
+              }
+            }
 
             // render the line!
-            if ((text_buffer->line_task[line_number]->mode_edit_temp == FALSE) || (text_buffer->line_task[line_number]->mode_edit == TRUE)){
+            if (color_draft == 1){
               sdlj_textbox_render(render, &editor_textbox, line);
               SDL_Rect src = {0, 0, editor_textbox.width, editor_textbox.height};
               SDL_Rect dst = {0, line_height_offset, editor_textbox.width, editor_textbox.height};
