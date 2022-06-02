@@ -402,7 +402,7 @@ void editor_users_cleanup(User_Memory* user_memory){
 }
 
 
-void editor_parse_task_detect(Task_Memory* task_memory, TextBuffer* text_buffer){
+void editor_parse_task_detect(Task_Memory* task_memory, Text_Buffer* text_buffer){
   printf("[STATUS] PASS 1 editor_parse_task_detect()\n");
   char* text_end = text_buffer->text + text_buffer->length;
   char* line_start = text_buffer->text;
@@ -523,7 +523,7 @@ char* text_append_date(char* text_output, uint64_t day){
 
 
 // comma to separate values in a list
-void editor_parse_propertyline(Task_Memory* task_memory, User_Memory* user_memory, Task* task, char* line_start, int line_working_length, TextBuffer* text_buffer, Text_Cursor* text_cursor){
+void editor_parse_propertyline(Task_Memory* task_memory, User_Memory* user_memory, Task* task, char* line_start, int line_working_length, Text_Buffer* text_buffer, Text_Cursor* text_cursor){
   char* line_end = line_start + line_working_length;
   // split into property and value parts. split on ':'
   char* split = memchr(line_start, (int) ':', line_working_length);
@@ -651,7 +651,7 @@ void editor_parse_propertyline(Task_Memory* task_memory, User_Memory* user_memor
 // in edit mode, lock the Activity_Node ids that are being shown in the edit pane.
 // modify the full network directly. automatically delete/re-add everything being edited in edit mode. assume all those nodes selected are trashed and revised. 
 // how to balance reparsing everything at 100Hz and only reparsing what is needed? maybe use the cursor to direct efforts? only reparse from scratch the node the cursor is in
-void editor_parse_text(Task_Memory* task_memory, User_Memory* user_memory, TextBuffer* text_buffer, Text_Cursor* text_cursor){
+void editor_parse_text(Task_Memory* task_memory, User_Memory* user_memory, Text_Buffer* text_buffer, Text_Cursor* text_cursor){
   uint64_t cpu_timer_start = SDL_GetPerformanceCounter();
 
   char* text_start = text_buffer->text;
@@ -946,8 +946,8 @@ void sdlj_textbox_render(SDL_Renderer* render, TextBox* textbox, char* text){
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-TextBuffer* editor_buffer_init(){
-  TextBuffer* tb = (TextBuffer*) malloc(sizeof(TextBuffer));
+Text_Buffer* editor_buffer_init(){
+  Text_Buffer* tb = (Text_Buffer*) malloc(sizeof(Text_Buffer));
 
   tb->text = (char*) malloc(EDITOR_BUFFER_LENGTH * sizeof(char));
   memset(tb->text, 0, EDITOR_BUFFER_LENGTH);
@@ -963,14 +963,14 @@ TextBuffer* editor_buffer_init(){
   return tb;
 }
 
-void editor_buffer_destroy(TextBuffer* tb){
+void editor_buffer_destroy(Text_Buffer* tb){
   free(tb->text);
   free(tb->line_length);
   free(tb->line_task);
 }
 
 
-void editor_find_line_lengths(TextBuffer* tb){
+void editor_find_line_lengths(Text_Buffer* tb){
   char* line_start = tb->text;
   char* line_end = NULL; 
   char* text_buffer_end = tb->text + tb->length;
@@ -1029,7 +1029,7 @@ void editor_cursor_destroy(Text_Cursor* text_cursor){
 
 
 // given pos, find xy at all indexes. shows a problem with 0/1 length lines?
-void editor_cursor_find_xy(TextBuffer* text_buffer, Text_Cursor* text_cursor){
+void editor_cursor_find_xy(Text_Buffer* text_buffer, Text_Cursor* text_cursor){
   // advance until we find the xy for the first one
   // then keep advancing but look for the next one
 
@@ -1053,7 +1053,7 @@ void editor_cursor_find_xy(TextBuffer* text_buffer, Text_Cursor* text_cursor){
 
 
 // lookup what task is pointed to by the editor mode cursor
-void editor_cursor_find_task(TextBuffer* text_buffer, Text_Cursor* text_cursor){
+void editor_cursor_find_task(Text_Buffer* text_buffer, Text_Cursor* text_cursor){
   text_cursor->task = text_buffer->line_task[text_cursor->y[0]];
 }
 
@@ -1113,7 +1113,7 @@ void editor_cursor_quicksort(int* list, size_t start, size_t end){
 
 
 // sort the cursors in descending order, then recompute xy coordinates
-void editor_cursor_sort(TextBuffer* text_buffer, Text_Cursor* text_cursor){
+void editor_cursor_sort(Text_Buffer* text_buffer, Text_Cursor* text_cursor){
   // sort pos using quicksort
   editor_cursor_quicksort(text_cursor->pos, 0, text_cursor->qty-1);
 
@@ -1124,7 +1124,7 @@ void editor_cursor_sort(TextBuffer* text_buffer, Text_Cursor* text_cursor){
 
 
 // move one cursor by the given amount
-void editor_cursor_move(TextBuffer* tb, Text_Cursor* tc, size_t index, int movedir){
+void editor_cursor_move(Text_Buffer* tb, Text_Cursor* tc, size_t index, int movedir){
   if (movedir == TEXTCURSOR_MOVE_DIR_RIGHT){
     if (tc->pos[index] < tb->length){
       // TODO if allowed by length
@@ -1200,7 +1200,7 @@ printf("move index %lu in direction %d\n", index, movedir);
 
 
 // throw out everything, load from a file and parse it
-void editor_load_text(Task_Memory* task_memory, User_Memory* user_memory, TextBuffer* text_buffer, const char* filename, Text_Cursor* text_cursor){
+void editor_load_text(Task_Memory* task_memory, User_Memory* user_memory, Text_Buffer* text_buffer, const char* filename, Text_Cursor* text_cursor){
 
   // open the file, create if not exist, use persmissions of current user
   FILE* fd = fopen(filename, "r"); 
@@ -1254,7 +1254,7 @@ char* text_append_string(char* text, char* addition){
 
 
 // TODO rename to something better - "generate?"
-void editor_text_from_data(Task_Memory* task_memory, TextBuffer* text_buffer, uint8_t all_tasks){
+void editor_text_from_data(Task_Memory* task_memory, Text_Buffer* text_buffer, uint8_t all_tasks){
   char* text = text_buffer->text;
   int line_number = 0;
 
@@ -1365,7 +1365,7 @@ void editor_text_from_data(Task_Memory* task_memory, TextBuffer* text_buffer, ui
 }
 
 
-void text_buffer_save(TextBuffer* text_buffer, char* filename){
+void text_buffer_save(Text_Buffer* text_buffer, char* filename){
 
   FILE* fd = fopen(filename, "w");
   if (fd != NULL){
@@ -1411,7 +1411,7 @@ char* strstr_n(char* haystack_start, size_t haystack_n, char* needle, size_t nee
   return haystack;
 }
 
-void editor_symbol_rename(Task_Memory* task_memory, User_Memory* user_memory, TextBuffer* text_buffer, Text_Cursor* text_cursor){
+void editor_symbol_rename(Task_Memory* task_memory, User_Memory* user_memory, Text_Buffer* text_buffer, Text_Cursor* text_cursor){
   printf("[SYMBOL RENAME] FUNCTION ACTIVATED**********************************\n");
   if (text_cursor->qty > 1){
     printf("[WARNING] CURRENT ENTITY BASED ONLY ON FIRST CURSOR [0]\n");
@@ -1539,7 +1539,7 @@ int main(int argc, char* argv[]){
   name_textbox.color.r = 0; name_textbox.color.g = 0; name_textbox.color.b = 0; name_textbox.color.a = 0xFF;
   name_textbox.texture = NULL;
 
-  TextBuffer* text_buffer = editor_buffer_init();
+  Text_Buffer* text_buffer = editor_buffer_init();
   editor_load_text(task_memory, user_memory, text_buffer, argv[1], text_cursor); 
   schedule_solve_status = schedule_solve(task_memory, schedule_best, schedule_working);
   uint64_t day_project_start = schedule_best->day_start;
@@ -1609,7 +1609,7 @@ int main(int argc, char* argv[]){
       if (keybind_global_file_save(evt) == TRUE){
         printf("[file op] save requested\n");
         // put into some temporary allocated buffer so not disrupting the current selection or editor buffer
-        TextBuffer* save_buffer = editor_buffer_init();
+        Text_Buffer* save_buffer = editor_buffer_init();
         
         // regenerate text for all tasks
         editor_text_from_data(task_memory, save_buffer, TRUE);

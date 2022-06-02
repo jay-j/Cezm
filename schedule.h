@@ -167,13 +167,13 @@ void status_color_init(){
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-typedef struct TextBuffer{
+typedef struct Text_Buffer{
   char* text;
   int length;
   int* line_length; // [pointer to lineA start] + [line_length A] = [pointer to lineB start]
   int lines;
   Task** line_task; // pointer to what task this line corresponds to
-} TextBuffer;
+} Text_Buffer;
 
 typedef struct Text_Cursor{
   size_t qty;
