@@ -1,5 +1,6 @@
 // Jay Jasper, 2022
 
+// standard system files
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
@@ -7,10 +8,13 @@
 #include <assert.h>
 #include <time.h>
 #include <ctype.h> // for isalnum()
+
+// external dependencies
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_image.h>
 #include <SDL2/SDL_ttf.h>
 
+// other files within this project
 #include "schedule.h"
 #include "keyboard_bindings.h"
 #include "utilities-c/hash_lib/hashtable.h"
@@ -2401,10 +2405,12 @@ int main(int argc, char* argv[]){
 
     // editor cursor jumps around to follow display
     else if (viewport_active == VIEWPORT_DISPLAY){
-      for (int i=0; i<text_buffer->lines; ++i){
-        if (text_buffer->line_task[i] == display_cursor->task){
-          text_cursor->y[0] = i;
-          break;
+      if ((display_cursor != NULL) && (text_buffer->lines > 0)){
+        for (int i=0; i<text_buffer->lines; ++i){
+          if (text_buffer->line_task[i] == display_cursor->task){
+            text_cursor->y[0] = i;
+            break;
+          }
         }
       }
     }
