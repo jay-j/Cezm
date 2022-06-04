@@ -1501,6 +1501,8 @@ int main(int argc, char* argv[]){
   int running = 1;
   int viewport_active = VIEWPORT_EDITOR;
   // viewports, and dynamic sizing stuff
+  int window_split_position = WINDOW_WIDTH_INIT * 0.25; 
+  uint8_t window_split_position_changing = FALSE;
   SDL_Rect viewport_editor;
   SDL_Rect viewport_display;
   SDL_Rect viewport_display_body;
@@ -1573,7 +1575,7 @@ int main(int argc, char* argv[]){
     SDL_GetWindowSize(win, &window_width, &window_height);
     viewport_editor.x = 0;
     viewport_editor.y = 0;
-    viewport_editor.w = window_width / 4;
+    viewport_editor.w = window_split_position; 
     viewport_editor.h = window_height;
     viewport_display.x = viewport_editor.w;
     viewport_display.y = 0;
@@ -1633,6 +1635,28 @@ int main(int argc, char* argv[]){
         viewport_active = VIEWPORT_EDITOR;
         editor_cursor_reset(text_cursor);
      }
+
+     // use the mouse to adjust relative viewport size
+     // start recording the split-adjusting-state
+     if (evt.type == SDL_MOUSEBUTTONDOWN){
+        int mouse_x, mouse_y;
+        SDL_GetMouseState(&mouse_x, &mouse_y);
+        if (abs(mouse_x - window_split_position) < 10){
+          window_split_position_changing = TRUE;
+        }
+      }
+      // if in adjusting state, respond to mouse, complete adjusting state on button release
+      if (window_split_position_changing == TRUE){
+        if (evt.type == SDL_MOUSEMOTION){
+          int mouse_x, mouse_y;
+          SDL_GetMouseState(&mouse_x, &mouse_y);
+          window_split_position = mouse_x;
+          parse_text = TRUE;
+        }
+        if (evt.type == SDL_MOUSEBUTTONUP){
+          window_split_position_changing = FALSE;
+        }
+      }
 
       if (keybind_viewport_mode_toggle(evt) == TRUE){
         if (viewport_active == VIEWPORT_DISPLAY){
