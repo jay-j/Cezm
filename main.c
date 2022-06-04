@@ -1638,7 +1638,6 @@ int main(int argc, char* argv[]){
         if (viewport_active == VIEWPORT_DISPLAY){
           printf("switch to viewport editor\n");
           viewport_active = VIEWPORT_EDITOR;
-          editor_cursor_reset(text_cursor);
           for (size_t t=0; t<task_memory->allocation_total; ++t){
             task_memory->tasks[t].mode_edit_temp = FALSE;
           }
