@@ -1029,7 +1029,7 @@ void editor_cursor_destroy(Text_Cursor* text_cursor){
 
 
 // given pos, find xy at all indexes. shows a problem with 0/1 length lines?
-void editor_cursor_find_xy(Text_Buffer* text_buffer, Text_Cursor* text_cursor){
+void editor_cursor_xy_get(Text_Buffer* text_buffer, Text_Cursor* text_cursor){
   // advance until we find the xy for the first one
   // then keep advancing but look for the next one
 
@@ -1048,6 +1048,20 @@ void editor_cursor_find_xy(Text_Buffer* text_buffer, Text_Cursor* text_cursor){
     if (index > 0){
       assert(text_cursor->pos[index] > text_cursor->pos[index-1]);
     }
+  }
+}
+
+
+// set x and y position of cursor, set cursor->pos to the correct value
+// assuming that text_buffer->line_lengths are correct
+void editor_cursor_xy_set(Text_Buffer* text_buffer, Text_Cursor* text_cursor, size_t index, int x, int y){
+  assert(y <= text_buffer->lines);
+  text_cursor->x[index] = x;
+  text_cursor->y[index] = y;
+
+  text_cursor->pos[index] = x;
+  for (int i=0; i<y; ++i){
+    text_cursor->pos[index] += text_buffer->line_length[i];
   }
 }
 
@@ -1119,7 +1133,7 @@ void editor_cursor_sort(Text_Buffer* text_buffer, Text_Cursor* text_cursor){
 
   // then process to recompute xy
   printf("result after sorting..\n");
-  editor_cursor_find_xy(text_buffer, text_cursor);
+  editor_cursor_xy_get(text_buffer, text_cursor);
 }
 
 
@@ -1808,7 +1822,7 @@ int main(int argc, char* argv[]){
             // TODO behavior choice
             size_t index = 0;
             printf("pos: %d --> (x,y) = (%d, %d)\n", text_cursor->pos[index], text_cursor->x[index], text_cursor->y[index]);
-            editor_cursor_find_xy(text_buffer, text_cursor);
+            editor_cursor_xy_get(text_buffer, text_cursor);
           }
           else if (keybind_editor_symbol_rename(evt) == TRUE){
             editor_symbol_rename(task_memory, user_memory, text_buffer, text_cursor);
@@ -1827,7 +1841,7 @@ int main(int argc, char* argv[]){
           }
           else if (evt.key.keysym.sym == SDLK_F5){
             printf("updating xy coordinates of all cursors\n");
-            editor_cursor_find_xy(text_buffer, text_cursor);
+            editor_cursor_xy_get(text_buffer, text_cursor);
           }
           // F2 - rename symbol in edit mode
           // SHIFT+F2 - rename symbol even if not in edit mode
@@ -2362,7 +2376,7 @@ int main(int argc, char* argv[]){
       // figure out how many lines there are to render
       editor_find_line_lengths(text_buffer);
       
-      editor_cursor_find_xy(text_buffer, text_cursor);
+      editor_cursor_xy_get(text_buffer, text_cursor);
     }
 
     if (parse_text == TRUE){
@@ -2475,7 +2489,7 @@ int main(int argc, char* argv[]){
       if ((display_cursor != NULL) && (text_buffer->lines > 0)){
         for (int i=0; i<text_buffer->lines; ++i){
           if (text_buffer->line_task[i] == display_cursor->task){
-            text_cursor->y[0] = i;
+            editor_cursor_xy_set(text_buffer, text_cursor, 0, 0, i);
             break;
           }
         }
