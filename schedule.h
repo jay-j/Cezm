@@ -321,7 +321,7 @@ int schedule_task_push(Schedule_Event_List* schedule_working, Task* task, int sc
   // if added by prerequisite.. search forwards. from prerequisite day end to the earliest point when all users are available
   // if added by dependency... search backwards. 
   // need to make sure the entire block of user time is available
-  // push the task farther in the scheduling direction until conflict is resolved? one day at a time
+  // push the task farther in the scheduling direction until conflict is resolved, one day at a time
   //
   // only add a task to ready once all of its prereqs or dependents are scheduled. add to ready with a suggested date
   // use task->schedule_seek_direction to know which way to try and adjust a task to make it work. 
@@ -421,30 +421,36 @@ int schedule_task_pop(Schedule_Event_List* schedule_working){
 void schedule_solve_iter(Task_Memory* task_memory, Schedule_Event_List* schedule_best, Schedule_Event_List* schedule_working){
   // quit when all tasks have been scheduled
   if (task_memory->allocation_used - schedule_working->qty == 0){
-    /*
-    printf("[SCHEDULER] ALL TASKS SCHEDULED - SUCCESS!\n");
-    for (size_t i=0; i<task_memory->allocation_total; ++i){
-      if (task_memory->tasks[i].trash == FALSE){
-        printf("  %s from %lu to %lu\n", task_memory->tasks[i].task_name, task_memory->tasks[i].day_start, task_memory->tasks[i].day_end);
+
+    // double check if any task dependencies are violated now that everything is scheduled
+    schedule_working->solved = TRUE;
+    for (size_t t=0; t<task_memory->allocation_total; ++t){
+      Task* task = task_memory->tasks+t;
+      if (task->trash == FALSE){
+        for (size_t i=0; i<task->prereq_qty; ++i){
+          if (task->day_start < task->prereqs[i]->day_end){
+             schedule_working->solved = FALSE;
+          }
+        }
       }
     }
-    */
-    
+   
     // check for and save best schedule 
-    schedule_working->solved = TRUE; 
-    schedule_calculate_duration(schedule_working, task_memory);
+    if (schedule_working->solved == TRUE){
+      schedule_calculate_duration(schedule_working, task_memory);
 
-    if (schedule_best->solved == FALSE){
-      //printf("[SCHEDULER] FIRST SOLVE\n");
-      schedule_copy(schedule_best, schedule_working);
-    }
-    else if (schedule_working->day_duration < schedule_best->day_duration){
-      //printf("[SCHEDULER] A BETTER SOLVE THAN BEFORE :)\n");
-      schedule_copy(schedule_best, schedule_working);
-    }
-    else{
-      // not a winner
-      //printf("[SCHEDULER] A WORSE SOLVE THAN BEFORE :(\n");
+      if (schedule_best->solved == FALSE){
+        //printf("[SCHEDULER] FIRST SOLVE\n");
+        schedule_copy(schedule_best, schedule_working);
+      }
+      else if (schedule_working->day_duration < schedule_best->day_duration){
+        //printf("[SCHEDULER] A BETTER SOLVE THAN BEFORE :)\n");
+        schedule_copy(schedule_best, schedule_working);
+      }
+      else{
+        // not a winner
+        //printf("[SCHEDULER] A WORSE SOLVE THAN BEFORE :(\n");
+      }
     }
 
     return; 
