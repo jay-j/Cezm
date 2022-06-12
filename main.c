@@ -2123,6 +2123,11 @@ int main(int argc, char* argv[]){
         } // end task create successor
 
         // DISPLAY CURSOR NAVIGATION
+        // pick the first one if nothing is selected
+        else if (((keybind_display_cursor_down(evt) == TRUE) || (keybind_display_cursor_up(evt) == TRUE) || (keybind_display_cursor_left(evt) == TRUE) || (keybind_display_cursor_right(evt) == TRUE))
+         && (display_cursor == NULL)){
+          display_cursor = task_displays;
+        }
         else if (keybind_display_cursor_up(evt) == TRUE){
           printf("try to move display cursor upward!\n");
           
