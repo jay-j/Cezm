@@ -1,3 +1,4 @@
+#include <SDL2/SDL.h>
 #include <stdint.h>
 #include "utilities-c/hash_lib/hashtable.h"
 
@@ -415,6 +416,7 @@ int schedule_task_pop(Schedule_Event_List* schedule_working){
 }
 
 
+// attempt to continue scheduling by adding a task to the schedule
 // no island tasks allowed.. every task must either have fixed_i or a prereq
 // how do you know when you are done? when all non trash tasks are scheduled
 // how do you know when to give up? TODO

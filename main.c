@@ -669,7 +669,7 @@ void editor_parse_text(Task_Memory* task_memory, User_Memory* user_memory, Text_
   }
   for (size_t i=0; i<task_memory->allocation_total; ++i){
     if (tasks[i].mode_edit == TRUE){
-      tasks[i].prereq_qty = 0;
+      tasks[i].prereq_qty = 0; // TODO is there a better way to do this? using mode_edit and cleanup?
       //tasks[i].user_qty = 0;
     }
   }
@@ -970,6 +970,8 @@ void editor_buffer_destroy(Text_Buffer* tb){
 }
 
 
+// parse text_buffer->text for endlines.
+// store result in text_buffer->lines and text_buffer->line_lengths[]
 void editor_find_line_lengths(Text_Buffer* tb){
   char* line_start = tb->text;
   char* line_end = NULL; 
@@ -1074,7 +1076,7 @@ void editor_cursor_find_task(Text_Buffer* text_buffer, Text_Cursor* text_cursor)
 
 size_t editor_cursor_quicksort_partition(int* list, size_t start, size_t end){
    // pivot value, from the middle of the array
-   int pivot_index = (int) floor((start + end)/2 );
+   int pivot_index = (int) floor((start + end)/2.0 );
    int pivot = list[pivot_index];
 
    // left index
@@ -1209,7 +1211,7 @@ void editor_cursor_move(Text_Buffer* tb, Text_Cursor* tc, size_t index, int move
 }
 
 
-// throw out everything, load from a file and parse it
+// clear text_buffer, load from a file [filename] and parse it
 void editor_load_text(Task_Memory* task_memory, User_Memory* user_memory, Text_Buffer* text_buffer, const char* filename, Text_Cursor* text_cursor){
 
   // open the file, create if not exist, use persmissions of current user
@@ -1539,10 +1541,7 @@ int main(int argc, char* argv[]){
   editor_textbox.texture = NULL;
 
   TextBox editor_textbox_draft;
-  editor_textbox_draft.color.r = 100;
-  editor_textbox_draft.color.g = 100;
-  editor_textbox_draft.color.b = 100;
-  editor_textbox_draft.color.a = 0xFF;
+  editor_textbox_draft.color.r = 100;  editor_textbox_draft.color.g = 100;  editor_textbox_draft.color.b = 100;  editor_textbox_draft.color.a = 0xFF;
   editor_textbox_draft.texture = NULL;
   
   Text_Cursor* text_cursor = editor_cursor_create();
@@ -1679,6 +1678,7 @@ int main(int argc, char* argv[]){
           for (size_t t=0; t<task_memory->allocation_total; ++t){
             task_memory->tasks[t].mode_edit_temp = FALSE;
           }
+          text_cursor->qty = 1;
           SDL_StartTextInput();
         }
         else if(viewport_active == VIEWPORT_EDITOR){
@@ -2357,6 +2357,7 @@ int main(int argc, char* argv[]){
     /////////////////////////////// PROCESSING //////////////////////////////////////////
     if (display_selection_changed == TRUE){
       printf("[STATUS] DISPLAY SELECTION CHANGED=============\n");
+      // look through tasks in edit mode and set their users to edit mode also
       for (size_t u=0; u<user_memory->allocation_total; ++u){
         user_memory->users[u].mode_edit = FALSE;
       }
@@ -2370,17 +2371,16 @@ int main(int argc, char* argv[]){
         }
       }
       editor_text_from_data(task_memory, text_buffer, FALSE); 
-    }
-
-    if ((display_selection_changed == TRUE) || (parse_text == TRUE)){
-      // figure out how many lines there are to render
       editor_find_line_lengths(text_buffer);
-      
       editor_cursor_xy_get(text_buffer, text_cursor);
     }
 
     if (parse_text == TRUE){
       printf("[STATUS] TEXT PARSING REQUESTED--------------------------------------\n");
+
+      // figure out how many lines there are to render
+      editor_find_line_lengths(text_buffer);
+      editor_cursor_xy_get(text_buffer, text_cursor);
 
       // extract property changes from the text
       editor_parse_text(task_memory, user_memory, text_buffer, text_cursor);
@@ -2424,7 +2424,10 @@ int main(int argc, char* argv[]){
             user_column_count += 1;
           }
         }
-
+        if (orphaned_tasks == FALSE){
+          assert(user_memory->allocation_used == user_column_count); // TODO doesn't account for nouser column
+        }
+  
         // TODO column sorting?
         // have a list of pointers... so the shared 'column center pixel' is a pointer to which user, essentially.. and then those get shuffled to optimize?
         // basically.. want a dynamically updating thing so to change column is just changing one integer, not searching through N display_tasks to change every one
