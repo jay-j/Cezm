@@ -223,6 +223,7 @@ typedef struct Schedule_Event_List {
   uint64_t day_start;
   uint64_t day_end;
   uint64_t day_duration;
+  double solve_time_ms;
   uint8_t solved;
   Schedule_Event* events;
 } Schedule_Event_List;
@@ -567,6 +568,7 @@ int schedule_solve(Task_Memory* task_memory, Schedule_Event_List* schedule_best,
 
   uint64_t cpu_timer_end = SDL_GetPerformanceCounter();
   double cpu_timer_elapsed = ((double) cpu_timer_end - cpu_timer_start) / ((double) SDL_GetPerformanceFrequency());
+  schedule_best->solve_time_ms = cpu_timer_elapsed*1000;
 
   if (schedule_best->solved == TRUE){
     for(size_t e=0; e<schedule_best->qty; ++e){

@@ -899,6 +899,39 @@ void draw_dependency_curve(SDL_Renderer* render, int start_x, int start_y, int e
   }
 }
 
+
+// draw the schedule time in the lower right corner of the display viewport
+void draw_time_stats(SDL_Renderer* render, SDL_Rect viewport_display, Schedule_Event_List* schedule){
+  char time_string[32];
+  snprintf(time_string, 32, "Solve time: %.1lf ms", schedule->solve_time_ms);
+
+  SDL_Color text_color = {
+    .r = 0,
+    .g = 0,
+    .b = 0,
+    .a = 0
+  };
+
+  SDL_Surface* surface = TTF_RenderText_Blended(global_font, time_string, text_color);  
+  assert(surface != NULL);
+  
+  SDL_Texture* texture = SDL_CreateTextureFromSurface(render, surface);
+  assert(texture != NULL);
+  
+  SDL_Rect textbox;
+  TTF_SizeText(global_font, time_string, &textbox.w, &textbox.h);
+  textbox.x = viewport_display.w - textbox.w - 5;
+  textbox.y = viewport_display.h - textbox.h - 5;
+
+  SDL_Rect src = {0, 0, textbox.w, textbox.h};
+  assert(SDL_RenderCopy(render, texture, &src, &textbox) == 0);
+  
+  // TODO find a different way to do this that doesn't involve so much memory alloc and dealloc!!!
+  SDL_DestroyTexture(texture);
+  SDL_FreeSurface(surface);
+  
+}
+
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 
@@ -2787,6 +2820,10 @@ int main(int argc, char* argv[]){
       SDL_SetRenderDrawColor(render, 220, 0, 0, 255);
       SDL_RenderFillRect(render, &rect_errors);
     }
+    
+    // display solve time stats
+    draw_time_stats(render, viewport_display, schedule_best);
+    
     
     //// UPDATE SCREEN
     SDL_RenderPresent(render);
