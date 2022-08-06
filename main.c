@@ -725,7 +725,7 @@ void editor_parse_text(Task_Memory* task_memory, User_Memory* user_memory, Text_
       }
 
       // TODO MULTICURSOR
-      if ((text_cursor->pos[0] > line_start - text_start) && (text_cursor->pos[0] < line_end - text_start)){
+      if ((text_cursor->pos[0] >= line_start - text_start) && (text_cursor->pos[0] < line_end - text_start)){
         printf("cursor on line creating task '%s'\n", task->task_name);
         text_cursor->entity_type = TEXTCURSOR_ENTITY_TASK;
         text_cursor->entity = (void*) task;
