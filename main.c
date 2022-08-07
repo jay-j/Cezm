@@ -18,6 +18,7 @@
 #include "schedule.h"
 #include "keyboard_bindings.h"
 #include "utilities-c/hash_lib/hashtable.h"
+#include "font_bitmap.h"
 
 // global
 #define WINDOW_WIDTH_INIT 1600
@@ -812,10 +813,30 @@ void sdl_cleanup(SDL_Window* win, SDL_Renderer* render){
 }
 
 
+SDL_Texture* texture_load(SDL_Renderer* renderer, char* filename){
+    
+  // use SDL_Surface CPU rendering to send the texture to the GPU
+  SDL_Surface* surf = IMG_Load(filename);
+  if (surf == NULL){
+    printf("Unable to load image at '%s' for texture. Error: %s\n", filename, IMG_GetError());
+    assert(0);
+  }
+  
+  SDL_Texture* texture = SDL_CreateTextureFromSurface(renderer, surf);
+  if (texture == NULL){
+    printf("Unable to create texture from image '%s'. Error: %s\n", filename, SDL_GetError());
+    assert(0);
+  }
+  
+  SDL_FreeSurface(surf); // don't need the SDL surface anymore
+  return texture;
+}
+
+
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 
-void task_draw_box(SDL_Renderer* render, Task_Display* task_display){
+void task_draw_box(SDL_Renderer* render, Task_Display* task_display, Font* font){
   Task* task = task_display->task;
 
   int border = 3;
@@ -840,36 +861,10 @@ void task_draw_box(SDL_Renderer* render, Task_Display* task_display){
   SDL_SetRenderDrawColor(render, status_colors[sc].r, status_colors[sc].g, status_colors[sc].b, status_colors[sc].a);
   //SDL_SetRenderDrawColor(render, 220, 220, 220, 255); // light grey? 
   SDL_RenderFillRect(render, &task_display->local);
-  
-  // draw the text on top
-  SDL_Color text_color = {
-    .r = 0,
-    .g = 0,
-    .b = 0,
-    .a = 0
-  };
-
-  SDL_Surface* surface = TTF_RenderText_Blended(global_font, task->task_name, text_color);
-  if (surface == NULL){
-    printf("text texture render surface error: %s\n", SDL_GetError());
-  }
-  assert(surface != NULL);
-
-  // for performance don't want to do this every frame https://forums.libsdl.org/viewtopic.php?t=10303
-  SDL_Texture* texture = SDL_CreateTextureFromSurface(render, surface);
-  assert(texture != NULL);
-
-  SDL_Rect textbox;
-  textbox.x = task_display->local.x + border;
-  textbox.y = task_display->local.y + border;
-  TTF_SizeText(global_font, task->task_name, &textbox.w, &textbox.h);
-
-  SDL_Rect src = {0, 0, textbox.w, textbox.h};
-  assert(SDL_RenderCopy(render, texture, &src, &textbox) == 0);
-  
-  // TODO find a different way to do this that doesn't involve so much memory alloc and dealloc!!!
-  SDL_DestroyTexture(texture);
-  SDL_FreeSurface(surface);
+   
+  // draw the text for the task name
+  SDL_Rect dst = {task_display->local.x + border, task_display->local.y + border, 0, 0};
+  fontmap_render_string(render, dst, font, task->task_name, task->task_name_length);
 }
 
 
@@ -943,38 +938,6 @@ typedef struct TextBox{
   int width_max;
 } TextBox;
 
-
-void sdlj_textbox_render(SDL_Renderer* render, TextBox* textbox, char* text){
-  //printf("rendering %s...\n", text);
-  // TODO this has a crashing problem... seems to show up if I rapidly edit a single line? or edit over and over and over?
-  // can crash even on a line very different than the long one? but seems to most often show if there is A line long line somewhere
-  if (textbox->texture != NULL){
-    SDL_DestroyTexture(textbox->texture);
-  }
-
-  // TODO TTF_RenderText_Blended_Wrapped() doesn't work / is undocumented
-  // TODO write manual and multiline wrapping work
-  SDL_Surface* surface = TTF_RenderText_Blended(global_font, text, textbox->color);
-  if (surface == NULL){
-    printf("texture render surface error: %s\n", SDL_GetError());
-  }
-  assert(surface != NULL);
-
-  textbox->texture = SDL_CreateTextureFromSurface(render, surface);
-  if (textbox->texture == NULL){
-    printf("text surface->texture creation erro: %s\n", SDL_GetError());
-  }
-  assert(textbox->texture != NULL);
-  //SDL_SetTextureBlendMode(textbox->texture, SDL_BlendMode
-
-  //textbox->width = surface->w;
-  //textbox->height = surface->h;
-  TTF_SizeText(global_font, text, &textbox->width, &textbox->height);
-  // printf("width: %d (of %d),  height: %d\n", textbox->width, textbox->width_max, textbox->height);
-
-  SDL_FreeSurface(surface);
-
-}
 
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1546,6 +1509,10 @@ int main(int argc, char* argv[]){
   SDL_Renderer* render;
   sdl_startup(&win, &render);
 
+  // load bitmap font from file
+  Font font = fontmap_file_load("font.dat");
+  font.texture = texture_load(render, "font.png");
+
   int window_width, window_height;
   int running = 1;
   int viewport_active = VIEWPORT_EDITOR;
@@ -1569,19 +1536,8 @@ int main(int argc, char* argv[]){
 
   // TODO smooth scroll system
   // TODO error flagging / colors system; live syntax parsing
-  TextBox editor_textbox;
-  editor_textbox.color.r = 0; editor_textbox.color.g = 0; editor_textbox.color.b = 0; editor_textbox.color.a = 0xFF;
-  editor_textbox.texture = NULL;
 
-  TextBox editor_textbox_draft;
-  editor_textbox_draft.color.r = 100;  editor_textbox_draft.color.g = 100;  editor_textbox_draft.color.b = 100;  editor_textbox_draft.color.a = 0xFF;
-  editor_textbox_draft.texture = NULL;
-  
   Text_Cursor* text_cursor = editor_cursor_create();
-
-  TextBox name_textbox;
-  name_textbox.color.r = 0; name_textbox.color.g = 0; name_textbox.color.b = 0; name_textbox.color.a = 0xFF;
-  name_textbox.texture = NULL;
 
   Text_Buffer* text_buffer = editor_buffer_init();
   editor_load_text(task_memory, user_memory, text_buffer, argv[1], text_cursor); 
@@ -1635,10 +1591,6 @@ int main(int argc, char* argv[]){
     viewport_display_body.y = viewport_display.y + viewport_display_header.h;
     viewport_display_body.w = viewport_display.w;
     viewport_display_body.h = viewport_display.h - viewport_display_header.h;
-
-    editor_textbox.width_max = viewport_editor.w;
-    editor_textbox_draft.width_max = viewport_editor.w;
-    name_textbox.width_max = window_width * 0.75;
 
     // INPUT
     SDL_Event evt;
@@ -2612,9 +2564,6 @@ int main(int argc, char* argv[]){
           // TODO make sure the height gets more offset
           if (text_buffer->line_length[line_number] > 1){
             
-            // need to just make a big texture, since this has to be SDL_RenderCopy() every frame TODO
-            // https://stackoverflow.com/questions/40886350/how-to-connect-multiple-textures-in-the-one-in-sdl2
-            // https://gamedev.stackexchange.com/questions/46238/rendering-multiline-text-with-sdl-ttf
             int color_draft = 0;
             if (text_buffer->line_task[line_number] != NULL){
               if ((text_buffer->line_task[line_number]->mode_edit_temp == FALSE) || (text_buffer->line_task[line_number]->mode_edit == TRUE)){
@@ -2624,21 +2573,18 @@ int main(int argc, char* argv[]){
 
             // render the line!
             if (color_draft == 1){
-              sdlj_textbox_render(render, &editor_textbox, line);
-              SDL_Rect src = {0, 0, editor_textbox.width, editor_textbox.height};
-              SDL_Rect dst = {0, line_height_offset, editor_textbox.width, editor_textbox.height};
-              assert(SDL_RenderCopy(render, editor_textbox.texture, &src, &dst) == 0);
+              SDL_Rect dst = {0, line_height_offset, viewport_editor.w, viewport_editor.h};
+              fontmap_render_string(render, dst, &font, line, text_buffer->line_length[line_number]);
             }
             else{
-              sdlj_textbox_render(render, &editor_textbox_draft, line);
-              SDL_Rect src = {0, 0, editor_textbox_draft.width, editor_textbox_draft.height};
-              SDL_Rect dst = {0, line_height_offset, editor_textbox_draft.width, editor_textbox_draft.height};
-              assert(SDL_RenderCopy(render, editor_textbox_draft.texture, &src, &dst) == 0);
+              SDL_Rect dst = {0, line_height_offset, viewport_editor.w, viewport_editor.h};
+              fontmap_render_string(render, dst, &font, line, text_buffer->line_length[line_number]); // TODO restore the colors
             }
-            line_height_offset += editor_textbox.height;
+
+            line_height_offset += font.map.max_height;
           }
           else{ // put gaps where lines are blank
-            line_height_offset += editor_textbox.height; // TODO check validity?? can this variable be unset?
+            line_height_offset += font.map.max_height; // TODO check validity?? can this variable be unset?
           }
 
           // advance to the next line
@@ -2651,7 +2597,8 @@ int main(int argc, char* argv[]){
 
       } // (close) if there is ANY text to display
       else{ // empty render if no text is there
-        sdlj_textbox_render(render, &editor_textbox, " ");
+        // sdlj_textbox_render(render, &editor_textbox, " ");
+        // TODO why render a single empty space?
       }
     } // endif request re-render text
 
@@ -2659,17 +2606,9 @@ int main(int argc, char* argv[]){
     {
       SDL_RenderSetViewport(render, &viewport_editor);
       char cursor_string[32];
-      sprintf(cursor_string, "%d --> (%d, %d)", text_cursor->pos[0], text_cursor->x[0], text_cursor->y[0]);
-      
-      TextBox editor_cursor_debug_textbox;
-      editor_cursor_debug_textbox.color.r = 0; editor_cursor_debug_textbox.color.g = 0;
-      editor_cursor_debug_textbox.color.b = 0; editor_cursor_debug_textbox.color.a = 0xFF;
-      editor_cursor_debug_textbox.texture = NULL;
-      sdlj_textbox_render(render, &editor_cursor_debug_textbox, cursor_string);
-
-      SDL_Rect src = {0, 0, editor_cursor_debug_textbox.width, editor_cursor_debug_textbox.height}; 
-      SDL_Rect dst = {0, viewport_editor.h - editor_cursor_debug_textbox.height, src.w, src.h};
-      assert(SDL_RenderCopy(render, editor_cursor_debug_textbox.texture, &src, &dst) == 0);
+      int len = sprintf(cursor_string, "%d --> (%d, %d)", text_cursor->pos[0], text_cursor->x[0], text_cursor->y[0]);
+      SDL_Rect dst = {0, viewport_editor.h - font.map.max_height, viewport_editor.w, font.map.max_height};
+      fontmap_render_string(render, dst, &font, cursor_string, len);
     }
 
 
@@ -2692,13 +2631,10 @@ int main(int argc, char* argv[]){
     if (user_memory->allocation_used > 0){
       for(size_t i=0; i<user_memory->allocation_total; ++i){
         if (user_memory->users[i].trash == FALSE){
-          sdlj_textbox_render(render, &name_textbox, user_memory->users[i].name);
-          SDL_Rect src = {0, 0, name_textbox.width, name_textbox.height};
-          SDL_Rect dst = {
-            user_memory->users[i].column_center_px - name_textbox.width/2,
-            5, 
-            name_textbox.width, name_textbox.height};
-          assert(SDL_RenderCopy(render, name_textbox.texture, &src, &dst) == 0);
+          SDL_Rect dst = {user_memory->users[i].column_center_px - 32, 0, 0, 0};
+          
+          // TODO need to compute width for center-alignment
+          fontmap_render_string(render, dst, &font, user_memory->users[i].name, user_memory->users[i].name_length);
         }
       }
     }
@@ -2779,7 +2715,7 @@ int main(int argc, char* argv[]){
         td->local.h = td->global.h;
 
         // now display on screen!
-        task_draw_box(render, td);
+        task_draw_box(render, td, &font);
       }
 
       // now draw bezier curves!
@@ -2836,6 +2772,7 @@ int main(int argc, char* argv[]){
 
 
   cleanup:
+  SDL_DestroyTexture(font.texture);
   sdl_cleanup(win, render);
   tasks_free(task_memory, user_memory);
   editor_buffer_destroy(text_buffer);
