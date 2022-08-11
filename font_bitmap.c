@@ -60,6 +60,39 @@ Font fontmap_file_load(char* filename){
 }
 
 
+// parse the entire string and calculate the required textbox size
+SDL_Rect fontmap_calculate_size(Font* font, char* string, size_t string_length){
+  SDL_Rect dimensions = {0};
+  dimensions.h += font->map.max_height;
+
+  int width_current = 0;
+  for (size_t i=0; i<string_length; ++i){
+    if (string[i] == '\0'){
+      break;
+    }
+    if (string[i] == '\n'){
+      if (width_current > dimensions.w){
+        dimensions.w = width_current;
+        width_current = 0;
+        dimensions.h += font->map.max_height;
+      }
+      continue;
+    }
+
+    SDL_Rect char_dim = fontmap_get_char(&font->map, string[i]);
+    width_current += char_dim.w;
+
+  }
+
+  // store the max width even if there is only a single line
+  if (width_current > dimensions.w){
+    dimensions.w = width_current;
+  }
+  
+  return dimensions;
+}
+
+
 // render a single character. Don't call directly - call fontmap_render_string()
 // cursor_x and cursor_y are to the top left of the character
 // does not line wrap
@@ -85,13 +118,45 @@ void fontmap_render_character(SDL_Renderer* renderer, int* cursor_x_px, int* cur
 // specify a rect to draw inside of. overflow goes out the bottom
 // prerequisite is the textbox background to be shaded
 // relies on the overall render flip to be done after this function
-void fontmap_render_string(SDL_Renderer* renderer, SDL_Rect textbox, Font* font, char* string, size_t string_length){
+void fontmap_render_string(SDL_Renderer* renderer, SDL_Rect textbox, Font* font, SDL_Color color, char* string, size_t string_length, uint64_t properties){
+  // calculate the required size then perform alignment
+  SDL_Rect size_required = fontmap_calculate_size(font, string, string_length);
+  int align_x = 0;
+  
+  // horizontal alignments
+  if ((properties & FONT_ALIGN_H_CENTER) > 0){ // TODO alignment for multiline text...
+    align_x = textbox.w / 2;
+    align_x -= (size_required.w / 2);
+  }
+  else if ((properties & FONT_ALIGN_H_RIGHT) > 0){
+    align_x = textbox.w;
+    align_x -= size_required.w;
+  }
+  else{
+    assert((properties & FONT_ALIGN_H_LEFT) > 0);
+  }
+  
+  // vertical alignments
+  int align_y = 0;
+  if ((properties & FONT_ALIGN_V_BOTTOM) > 0){
+    align_y = textbox.h - size_required.h;
+  }
+  else if ((properties & FONT_ALIGN_V_CENTER) > 0){
+    align_y = textbox.h / 2;
+    align_y -= size_required.h / 2;
+  }
+  else{
+    assert((properties & FONT_ALIGN_V_TOP) > 0);
+  }
+  
   // setup blend mode that will apply to all the text
   SDL_SetTextureBlendMode(font->texture, SDL_BLENDMODE_BLEND);
+  int check = SDL_SetTextureColorMod(font->texture, color.r, color.g, color.b);
+  assert(check == 0);
   
   // loop through each character and render!
-  int cursor_x = textbox.x;
-  int cursor_y = textbox.y;
+  int cursor_x = textbox.x + align_x;
+  int cursor_y = textbox.y + align_y;
   for(size_t i=0; i<string_length; ++i){
     // check for control flow characters
     if (string[i] == '\0'){
@@ -99,7 +164,7 @@ void fontmap_render_string(SDL_Renderer* renderer, SDL_Rect textbox, Font* font,
     }
     if (string[i] == '\n'){
       cursor_y += font->map.max_height;
-      cursor_x = textbox.x;
+      cursor_x = textbox.x + align_x;
       continue;
     }
     

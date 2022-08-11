@@ -23,7 +23,6 @@
 // global
 #define WINDOW_WIDTH_INIT 1600
 #define WINDOW_HEIGHT_INIT 1000
-#define FONTSIZE 16
 
 // modal switching
 enum VIEWPORT_TYPES {
@@ -36,7 +35,6 @@ enum VIEWPORT_TYPES {
 #define LINE_MAX_LENGTH 512
 #define EDITOR_BUFFER_LENGTH 1024
 #define EDITOR_LINES_MAX 1024
-TTF_Font* global_font = NULL;
 
 // viewport-display related
 #define TASK_DISPLAY_LIMIT 1024
@@ -799,10 +797,6 @@ void sdl_startup(SDL_Window** win, SDL_Renderer** render){
   *render = SDL_CreateRenderer(*win, -1, SDL_RENDERER_ACCELERATED);
   assert(*render != NULL);
 
-  // startup TTF and load in a font
-  assert(TTF_Init() != -1);
-  global_font = TTF_OpenFont("Hack_Font.ttf", FONTSIZE); // Ubuntu-R
-  assert(global_font != NULL);
 }
 
 
@@ -863,8 +857,9 @@ void task_draw_box(SDL_Renderer* render, Task_Display* task_display, Font* font)
   SDL_RenderFillRect(render, &task_display->local);
    
   // draw the text for the task name
-  SDL_Rect dst = {task_display->local.x + border, task_display->local.y + border, 0, 0};
-  fontmap_render_string(render, dst, font, task->task_name, task->task_name_length);
+  SDL_Rect dst = {task_display->local.x + border, task_display->local.y + border, task_display->local.w - 2*border, task_display->local.h - 2*border};
+  SDL_Color color = {0, 0, 0, 0xFF};
+  fontmap_render_string(render, dst, font, color, task->task_name, task->task_name_length, FONT_ALIGN_H_CENTER | FONT_ALIGN_V_TOP);
 }
 
 
@@ -896,49 +891,25 @@ void draw_dependency_curve(SDL_Renderer* render, int start_x, int start_y, int e
 
 
 // draw the schedule time in the lower right corner of the display viewport
-void draw_time_stats(SDL_Renderer* render, SDL_Rect viewport_display, Schedule_Event_List* schedule){
+void draw_time_stats(SDL_Renderer* render, SDL_Rect viewport_display, Schedule_Event_List* schedule, Font* font){
+
+  SDL_Rect dst = {5, 5, viewport_display.w - 5, viewport_display.h - 5};
+  SDL_Color color = {0, 0, 0, 0xFF};
+  
+  // time stats
   char time_string[32];
-  snprintf(time_string, 32, "Solve time: %.1lf ms", schedule->solve_time_ms);
+  int time_string_length = sprintf(time_string, "Solve time: %.1lf ms", schedule->solve_time_ms);
+  fontmap_render_string(render, dst, font, color, time_string, time_string_length, FONT_ALIGN_H_RIGHT | FONT_ALIGN_V_BOTTOM);
+  
+  // status solve yes no
+  if (schedule->solved == TRUE){
+    fontmap_render_string(render, dst, font, color, "Schedule: Solved", 17, FONT_ALIGN_H_LEFT | FONT_ALIGN_V_BOTTOM);
+  }
+  else{
+    fontmap_render_string(render, dst, font, color, "Schedule: Failed", 17, FONT_ALIGN_H_LEFT | FONT_ALIGN_V_BOTTOM);
+  }
 
-  SDL_Color text_color = {
-    .r = 0,
-    .g = 0,
-    .b = 0,
-    .a = 0
-  };
-
-  SDL_Surface* surface = TTF_RenderText_Blended(global_font, time_string, text_color);  
-  assert(surface != NULL);
-  
-  SDL_Texture* texture = SDL_CreateTextureFromSurface(render, surface);
-  assert(texture != NULL);
-  
-  SDL_Rect textbox;
-  TTF_SizeText(global_font, time_string, &textbox.w, &textbox.h);
-  textbox.x = viewport_display.w - textbox.w - 5;
-  textbox.y = viewport_display.h - textbox.h - 5;
-
-  SDL_Rect src = {0, 0, textbox.w, textbox.h};
-  assert(SDL_RenderCopy(render, texture, &src, &textbox) == 0);
-  
-  // TODO find a different way to do this that doesn't involve so much memory alloc and dealloc!!!
-  SDL_DestroyTexture(texture);
-  SDL_FreeSurface(surface);
-  
 }
-
-///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-
-typedef struct TextBox{
-  SDL_Texture* texture;
-  SDL_Color color;
-  int width;
-  int height;
-  int width_max;
-} TextBox;
-
-
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -1026,7 +997,7 @@ void editor_cursor_destroy(Text_Cursor* text_cursor){
 }
 
 
-// given pos, find xy at all indexes. shows a problem with 0/1 length lines?
+// given pos, find xy character index for all cursor. shows a problem with 0/1 length lines?
 void editor_cursor_xy_get(Text_Buffer* text_buffer, Text_Cursor* text_cursor){
   // advance until we find the xy for the first one
   // then keep advancing but look for the next one
@@ -1510,8 +1481,8 @@ int main(int argc, char* argv[]){
   sdl_startup(&win, &render);
 
   // load bitmap font from file
-  Font font = fontmap_file_load("font.dat");
-  font.texture = texture_load(render, "font.png");
+  Font font_normal = fontmap_file_load("font.dat");
+  font_normal.texture = texture_load(render, "font.png");
 
   int window_width, window_height;
   int running = 1;
@@ -1552,6 +1523,7 @@ int main(int argc, char* argv[]){
   Task_Display* task_displays = (Task_Display*) malloc(TASK_DISPLAY_LIMIT * sizeof(Task_Display));
   size_t task_display_qty = 0;
   int display_pixels_per_day = 10; 
+  int display_user_column_width;
   int display_camera_y = 0;
   Task_Display* display_cursor = NULL;
 
@@ -2417,13 +2389,14 @@ int main(int argc, char* argv[]){
         if (orphaned_tasks == FALSE){
           assert(user_memory->allocation_used == user_column_count); // TODO doesn't account for nouser column
         }
+        display_user_column_width = viewport_display.w / (user_column_count) - 30; // 30 px margin
   
         // TODO column sorting?
         // have a list of pointers... so the shared 'column center pixel' is a pointer to which user, essentially.. and then those get shuffled to optimize?
         // basically.. want a dynamically updating thing so to change column is just changing one integer, not searching through N display_tasks to change every one
 
         // build the list of task blocks that have to be displayed
-        // expect more display blocks than tasks since one task may be worked by several users
+        // expect more display blocks than tasks since one task may be worked by several users, or none at all
         for (size_t t=0; t<task_memory->allocation_total; ++t){
           task_memory->tasks[t].dependents_display_qty = 0;
         }
@@ -2432,6 +2405,7 @@ int main(int argc, char* argv[]){
         for (size_t t=0; t<task_memory->allocation_total; ++t){
           Task* task = task_memory->tasks + t;
           if (task->trash == FALSE){
+
             if (task->user_qty > 0){  
               for (size_t u=0; u<task->user_qty; ++u){
                 task_displays[task_display_qty].task = task;
@@ -2445,6 +2419,8 @@ int main(int argc, char* argv[]){
                 ++task_display_qty;
               }
             }
+            
+            // list tasks to display that aren't assigned to any user
             else{
               task_displays[task_display_qty].task = task;
               task_displays[task_display_qty].column_px = nouser_column_center_px;
@@ -2512,17 +2488,11 @@ int main(int argc, char* argv[]){
         char* line_start = text_buffer->text;
         char* line_end = NULL; 
         char* text_buffer_end = text_buffer->text + text_buffer->length;
-        char line[LINE_MAX_LENGTH];
         int line_height_offset = 0;
 
         for(int line_number=0; line_number<text_buffer->lines; ++line_number){
           line_end = line_start + text_buffer->line_length[line_number];
           // assert(line_end != line_start);
-
-          // prepare the line to be rendered
-          assert(text_buffer->line_length[line_number] < LINE_MAX_LENGTH);
-          memcpy(line, line_start, text_buffer->line_length[line_number]);
-          line[text_buffer->line_length[line_number]-1] = '\0';
 
           // cursor drawing!
           if (text_cursor->qty == 1){
@@ -2543,16 +2513,15 @@ int main(int argc, char* argv[]){
             for (size_t i=0; i<text_cursor->qty; ++i){
               if (text_cursor->y[i] == line_number){
 
-              // find the location within the line?
-              // TODO need to reference this to actual glyph widths!!
-              // editor_cursor_pos_x = text_cursor->pos - (line_start - text_buffer->text);
-              // editor_cursor_pos_y = text_lines - 1; // -1 for zero indexing
+              // find the location within the line, reading the actual glyph widths
+              // TODO consider caching the answer to this where the cursor index is stored
+              SDL_Rect cursor_find = fontmap_calculate_size(&font_normal, line_start, text_cursor->x[i]);
 
               SDL_Rect cursor_draw = {
-                .x = text_cursor->x[i] * 10,
-                .y = line_height_offset,
+                .x = cursor_find.w,
+                .y = line_height_offset-2,
                 .w = 3,
-                .h = 20
+                .h = cursor_find.h+2
               };
               SDL_SetRenderDrawColor(render, 50, 50, 80, 255);
               SDL_RenderFillRect(render, &cursor_draw);
@@ -2572,19 +2541,21 @@ int main(int argc, char* argv[]){
             }
 
             // render the line!
-            if (color_draft == 1){
+            if (color_draft == 1){ // TODO the logic of this seems to be inverted
               SDL_Rect dst = {0, line_height_offset, viewport_editor.w, viewport_editor.h};
-              fontmap_render_string(render, dst, &font, line, text_buffer->line_length[line_number]);
+              SDL_Color color = {0, 0, 0, 0xFF};
+              fontmap_render_string(render, dst, &font_normal, color, line_start, text_buffer->line_length[line_number], FONT_ALIGN_H_LEFT | FONT_ALIGN_V_TOP);
             }
             else{
               SDL_Rect dst = {0, line_height_offset, viewport_editor.w, viewport_editor.h};
-              fontmap_render_string(render, dst, &font, line, text_buffer->line_length[line_number]); // TODO restore the colors
+              SDL_Color color = {128, 128, 128, 0xFF};
+              fontmap_render_string(render, dst, &font_normal, color, line_start, text_buffer->line_length[line_number], FONT_ALIGN_H_LEFT | FONT_ALIGN_V_TOP); // TODO restore the colors
             }
 
-            line_height_offset += font.map.max_height;
+            line_height_offset += font_normal.map.max_height;
           }
           else{ // put gaps where lines are blank
-            line_height_offset += font.map.max_height; // TODO check validity?? can this variable be unset?
+            line_height_offset += font_normal.map.max_height; // TODO check validity?? can this variable be unset?
           }
 
           // advance to the next line
@@ -2607,8 +2578,9 @@ int main(int argc, char* argv[]){
       SDL_RenderSetViewport(render, &viewport_editor);
       char cursor_string[32];
       int len = sprintf(cursor_string, "%d --> (%d, %d)", text_cursor->pos[0], text_cursor->x[0], text_cursor->y[0]);
-      SDL_Rect dst = {0, viewport_editor.h - font.map.max_height, viewport_editor.w, font.map.max_height};
-      fontmap_render_string(render, dst, &font, cursor_string, len);
+      SDL_Rect dst = {0, 0, viewport_editor.w, viewport_editor.h};
+      SDL_Color color = {0, 0, 0, 0xFF};
+      fontmap_render_string(render, dst, &font_normal, color, cursor_string, len, FONT_ALIGN_H_LEFT | FONT_ALIGN_V_BOTTOM);
     }
 
 
@@ -2629,12 +2601,13 @@ int main(int argc, char* argv[]){
 
     // DRAW USERNAME HEADERS
     if (user_memory->allocation_used > 0){
+      SDL_Color color = {0, 0, 0, 0xFF};
       for(size_t i=0; i<user_memory->allocation_total; ++i){
         if (user_memory->users[i].trash == FALSE){
-          SDL_Rect dst = {user_memory->users[i].column_center_px - 32, 0, 0, 0};
+          SDL_Rect dst = {user_memory->users[i].column_center_px - display_user_column_width/2, 0, display_user_column_width, font_normal.map.max_height};
           
           // TODO need to compute width for center-alignment
-          fontmap_render_string(render, dst, &font, user_memory->users[i].name, user_memory->users[i].name_length);
+          fontmap_render_string(render, dst, &font_normal, color, user_memory->users[i].name, user_memory->users[i].name_length, FONT_ALIGN_H_CENTER | FONT_ALIGN_V_TOP);
         }
       }
     }
@@ -2703,7 +2676,7 @@ int main(int argc, char* argv[]){
 
       for (size_t i=0; i<task_display_qty; ++i){
         Task_Display* td = task_displays + i;
-        td->global.w = 180;
+        td->global.w = display_user_column_width;
         td->global.x = td->column_px - td->global.w / 2;
         td->global.y = display_pixels_per_day*(td->task->day_start - day_project_start);
         td->global.h = display_pixels_per_day*(td->task->day_duration); // TODO account for weekends
@@ -2715,7 +2688,7 @@ int main(int argc, char* argv[]){
         td->local.h = td->global.h;
 
         // now display on screen!
-        task_draw_box(render, td, &font);
+        task_draw_box(render, td, &font_normal);
       }
 
       // now draw bezier curves!
@@ -2758,7 +2731,7 @@ int main(int argc, char* argv[]){
     }
     
     // display solve time stats
-    draw_time_stats(render, viewport_display, schedule_best);
+    draw_time_stats(render, viewport_display, schedule_best, &font_normal);
     
     
     //// UPDATE SCREEN
@@ -2772,7 +2745,7 @@ int main(int argc, char* argv[]){
 
 
   cleanup:
-  SDL_DestroyTexture(font.texture);
+  SDL_DestroyTexture(font_normal.texture);
   sdl_cleanup(win, render);
   tasks_free(task_memory, user_memory);
   editor_buffer_destroy(text_buffer);

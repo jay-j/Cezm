@@ -115,9 +115,10 @@ int main(){
         textbox.w = 1000;
         textbox.h = 500; // TODO has no effect
         
+        SDL_Color color = {0, 128, 0, 255};
         
         // render the lots of text
-        fontmap_render_string(renderer, textbox, &font, text, text_length);
+        fontmap_render_string(renderer, textbox, &font, color, text, text_length, FONT_ALIGN_H_LEFT | FONT_ALIGN_V_TOP);
         
         // flip to complete rendering
         SDL_RenderPresent(renderer);

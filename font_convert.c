@@ -62,11 +62,12 @@ int main(int argc, char* argv[]){
   // go through the ascii table  (increment integers) for faster later lookup
   // record their size/location in the image, store that in a useful way
   // TODO is there a standard for bitmap fonts?
+  // Render as white so that later I can simply add a filter to the texture to get a different color
   srand(time(NULL));
   SDL_Color text_color = {
-    .r = 0x00,
-    .g = 0x00,
-    .b = 0x00,
+    .r = 0xFF,
+    .g = 0xFF,
+    .b = 0xFF,
     .a = 0xFF
   };
 
