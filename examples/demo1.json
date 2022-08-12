@@ -15,7 +15,7 @@ actuator_checkout5 {
 actuator_design1 {
   user: Ara
   duration: 10
-  fixed_start: 2022-03-08
+  fixed_start: 2022-08-02
   color: 1
 }
 actuator_review2 {
@@ -27,9 +27,9 @@ actuator_review2 {
 actuator_qual6{ 
   user: Jay,Ara
   prereq: actuator_checkout5
-  duration: 5
+  duration: 5 
   color: 9
-  fixed_end: 2022-05-01
+  fixed_end: 2022-09-15    
 }
 actuator_harness4 {
   user:Ara
