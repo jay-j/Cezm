@@ -11,7 +11,7 @@ typedef struct {
    double* history;
 } SmoothDelayInfo;
 
-SmoothDelayInfo profile_smoothdelay_setup(size_t steps);
+SmoothDelayInfo profile_smoothdelay_setup(int steps, double initial_value);
 
 double profile_smoothdelay_smooth(SmoothDelayInfo* profile, double curent_raw);
 

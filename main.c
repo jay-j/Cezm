@@ -19,6 +19,7 @@
 #include "keyboard_bindings.h"
 #include "lib/hashtable.h"
 #include "lib/font_bitmap.h"
+#include "lib/profile_smoothdelay.h" // try this first for constant latency
 
 // global
 #define WINDOW_WIDTH_INIT 1600
@@ -30,6 +31,8 @@ enum VIEWPORT_TYPES {
   VIEWPORT_DISPLAY,
   VIEWPORT_RENAME
 };
+
+
 
 // viewport-editor related
 #define LINE_MAX_LENGTH 512
@@ -911,6 +914,94 @@ void draw_time_stats(SDL_Renderer* render, SDL_Rect viewport_display, Schedule_E
 
 }
 
+void sdl_rect_copy(SDL_Rect* dst, SDL_Rect* src){
+  memcpy((void*) dst, (void*) src, sizeof(SDL_Rect));
+}
+
+typedef struct Viewport_Active_Border {
+  // current and target are the outside bounds of the border, in window reference frame
+  SDL_Rect current;
+  SDL_Rect target;
+  int border_width;
+  SDL_Color border_color;
+  SmoothDelayInfo profile_x;
+  SmoothDelayInfo profile_y;
+  SmoothDelayInfo profile_w;
+  SmoothDelayInfo profile_h;
+} Viewport_Active_Border;
+
+
+Viewport_Active_Border viewport_active_border_setup(SDL_Rect init, size_t profile_steps){
+  Viewport_Active_Border border;
+
+  sdl_rect_copy(&border.target, &init);
+  sdl_rect_copy(&border.current, &init);
+
+  border.border_width = 4;  
+  border.border_color.r = 50;
+  border.border_color.g = 50;
+  border.border_color.b = 150;
+  border.border_color.a = 255;
+
+  sdl_rect_copy(&border.target, &init);
+  sdl_rect_copy(&border.current, &init);
+  
+  border.profile_x = profile_smoothdelay_setup(profile_steps, border.current.x);
+  border.profile_y = profile_smoothdelay_setup(profile_steps, border.current.y);
+  border.profile_w = profile_smoothdelay_setup(profile_steps, border.current.w);
+  border.profile_h = profile_smoothdelay_setup(profile_steps, border.current.h);
+  
+  return border;
+}
+
+
+// during interpolation, the active border must hold together as a rectangle
+// so profile x,y,w,h instead of the vertices directly
+void viewport_active_border_profile_increment(Viewport_Active_Border* border){
+  border->current.x = (int) profile_smoothdelay_smooth(&border->profile_x, (double) border->target.x);
+  border->current.y = (int) profile_smoothdelay_smooth(&border->profile_y, (double) border->target.y);
+  border->current.w = (int) profile_smoothdelay_smooth(&border->profile_w, (double) border->target.w);
+  border->current.h = (int) profile_smoothdelay_smooth(&border->profile_h, (double) border->target.h);
+}
+
+
+// must have the full window viewport set
+void viewport_active_border_draw(SDL_Renderer* render, Viewport_Active_Border* border){
+  SDL_SetRenderDrawColor(render, border->border_color.r, border->border_color.g, border->border_color.b, border->border_color.a);
+  
+  // the top border
+  SDL_Rect top = {border->current.x, border->current.y, border->current.w, border->border_width};
+  SDL_RenderFillRect(render, &top);
+  
+  // the bottom border
+  SDL_Rect bottom = {border->current.x,
+                     border->current.y + border->current.h - border->border_width,
+                     border->current.w,
+                     border->border_width};
+  SDL_RenderFillRect(render, &bottom);
+  
+  
+  // the left border
+  SDL_Rect left = {border->current.x, border->current.y, border->border_width, border->current.h};
+  SDL_RenderFillRect(render, &left);
+  
+  // the right border
+  SDL_Rect right = {border->current.x + border->current.w - border->border_width,
+                    border->current.y, 
+                    border->border_width,
+                    border->current.h};
+  SDL_RenderFillRect(render, &right);
+  
+}
+
+
+void viewport_active_border_free(Viewport_Active_Border* border){
+  profile_smoothdelay_free(&border->profile_x); // TODO check...
+  profile_smoothdelay_free(&border->profile_y);
+  profile_smoothdelay_free(&border->profile_w);
+  profile_smoothdelay_free(&border->profile_h);
+}
+
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 Text_Buffer* editor_buffer_init(){
@@ -1490,10 +1581,13 @@ int main(int argc, char* argv[]){
   // viewports, and dynamic sizing stuff
   int window_split_position = WINDOW_WIDTH_INIT * 0.25; 
   uint8_t window_split_position_changing = FALSE;
+  SDL_Rect viewport_statusbar;
   SDL_Rect viewport_editor;
   SDL_Rect viewport_display;
   SDL_Rect viewport_display_body;
   SDL_Rect viewport_display_header;
+  SDL_Rect viewport_full_window = {0, 0, window_width, window_height};
+  Viewport_Active_Border viewport_active_border = viewport_active_border_setup(viewport_full_window, 20);
 
   Task_Memory  task_memory_object;
   Task_Memory* task_memory = &task_memory_object;
@@ -1547,14 +1641,17 @@ int main(int argc, char* argv[]){
 
     // DYNAMIC WINDOW RESIZING
     SDL_GetWindowSize(win, &window_width, &window_height);
+    viewport_statusbar.x = 0;
+    viewport_statusbar.h = 20; // TODO 
+    viewport_statusbar.w = window_width;
     viewport_editor.x = 0;
     viewport_editor.y = 0;
     viewport_editor.w = window_split_position; 
-    viewport_editor.h = window_height;
+    viewport_editor.h = window_height - viewport_statusbar.h;
     viewport_display.x = viewport_editor.w;
     viewport_display.y = 0;
     viewport_display.w = window_width - viewport_editor.w;
-    viewport_display.h = window_height;
+    viewport_display.h = window_height - viewport_statusbar.h;
     viewport_display_header.x = viewport_display.x;
     viewport_display_header.y = viewport_display.y;
     viewport_display_header.w = viewport_display.w;
@@ -1563,6 +1660,10 @@ int main(int argc, char* argv[]){
     viewport_display_body.y = viewport_display.y + viewport_display_header.h;
     viewport_display_body.w = viewport_display.w;
     viewport_display_body.h = viewport_display.h - viewport_display_header.h;
+    
+    viewport_statusbar.y = viewport_editor.h;
+    viewport_full_window.w = window_width;
+    viewport_full_window.h = window_height;
 
     // INPUT
     SDL_Event evt;
@@ -2473,10 +2574,10 @@ int main(int argc, char* argv[]){
     // editor viewport background
     SDL_RenderSetViewport(render, &viewport_editor);
     if (viewport_active == VIEWPORT_EDITOR){
-      SDL_SetRenderDrawColor(render, 0xFF, 0xFF, 0xFF, 0xFF);
+      SDL_SetRenderDrawColor(render, 0xF0, 0xF0, 0xF0, 0xFF);
     }
     else{
-      SDL_SetRenderDrawColor(render, 0xE0, 0xE0, 0xE0, 0xFF);
+      SDL_SetRenderDrawColor(render, 0xD0, 0xD0, 0xD0, 0xFF);
     }
     SDL_RenderFillRect(render, &viewport_editor);
     
@@ -2589,10 +2690,10 @@ int main(int argc, char* argv[]){
     // background color shows mode select
     SDL_Rect viewport_display_local = {0, 0, viewport_display.w, viewport_display.h};
     if (viewport_active == VIEWPORT_EDITOR){
-      SDL_SetRenderDrawColor(render, 0x80, 0x80, 0x80, 0xFF);
+      SDL_SetRenderDrawColor(render, 0xD0, 0xD0, 0xD0, 0xFF);
     }
     else{
-      SDL_SetRenderDrawColor(render, 0xFF, 0xFF, 0xFF, 0xFF);
+      SDL_SetRenderDrawColor(render, 0xF0, 0xF0, 0xF0, 0xFF);
     }
     SDL_RenderFillRect(render, &viewport_display_local);
 
@@ -2717,22 +2818,44 @@ int main(int argc, char* argv[]){
 
     // TODO graveyard for orphaned tasks (improper dependencies to be plotted, etc.)
 
-    // TODO write better warning for schedule fail
-    SDL_RenderSetViewport(render, &viewport_display);
+    // TODO write better warning messages for schedule fail
+    SDL_RenderSetViewport(render, &viewport_statusbar);
     if (schedule_solve_status == FAILURE){
       SDL_Rect rect_errors;
-      rect_errors.w = window_width;
-      rect_errors.h = 15; 
-      rect_errors.x = 0; 
-      rect_errors.y = window_height - rect_errors.h;
+      rect_errors.w = viewport_statusbar.w;
+      rect_errors.h = viewport_statusbar.h; 
+      rect_errors.x = 0;
+      rect_errors.y = 0;
 
       SDL_SetRenderDrawColor(render, 220, 0, 0, 255);
       SDL_RenderFillRect(render, &rect_errors);
     }
     
     // display solve time stats
-    draw_time_stats(render, viewport_display, schedule_best, &font_normal);
+    SDL_RenderSetViewport(render, &viewport_statusbar); // TODO not best practice?
+    draw_time_stats(render, viewport_statusbar, schedule_best, &font_normal);
     
+    // nicer display to indicate the current active viewport
+    {
+      // get a goal/target based on the current active viewport
+      if (viewport_active == VIEWPORT_EDITOR){
+        sdl_rect_copy(&viewport_active_border.target, &viewport_editor);
+      }
+      else if (viewport_active == VIEWPORT_DISPLAY){
+        sdl_rect_copy(&viewport_active_border.target, &viewport_display);
+      }
+      else{
+        SDL_Rect viewport_both = {0, 0, window_width, viewport_editor.h};
+        sdl_rect_copy(&viewport_active_border.target, &viewport_both);
+      }
+      
+      // move the thing to be shown
+      viewport_active_border_profile_increment(&viewport_active_border);
+      
+      // draw the thing
+      SDL_RenderSetViewport(render, &viewport_full_window);
+      viewport_active_border_draw(render, &viewport_active_border);
+    }
     
     //// UPDATE SCREEN
     SDL_RenderPresent(render);

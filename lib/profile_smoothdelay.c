@@ -6,7 +6,7 @@
 
 
 // Create the structure, allocate interior variables, and initialize the delay size
-SmoothDelayInfo profile_smoothdelay_setup(size_t steps){
+SmoothDelayInfo profile_smoothdelay_setup(int steps, double initial_value){
    SmoothDelayInfo profile;
    profile.step_current = 0;
    profile.steps = steps;
@@ -28,8 +28,8 @@ SmoothDelayInfo profile_smoothdelay_setup(size_t steps){
 
    // initialize the input history array
    profile.history = (double*) malloc(profile.steps * sizeof( *profile.history));
-   for (size_t i=0; i<profile.steps; ++i){
-      profile.history[i] = 0;
+   for (int i=0; i<profile.steps; ++i){
+      profile.history[i] = initial_value;
    }
 
    return profile;
@@ -75,7 +75,7 @@ void profile_smoothdelay_free(SmoothDelayInfo* profile){
 // print computed coefficients
 void profile_smoothdelay_print_coefficients(SmoothDelayInfo* profile){
    printf("Profile Coefficients: %d\n", profile->steps);
-   for(size_t i=0; i<profile->steps; ++i){
+   for(int i=0; i<profile->steps; ++i){
       printf("%lf  ", profile->coefficients[i]);
    }
    printf("\n");
