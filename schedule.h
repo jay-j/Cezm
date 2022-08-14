@@ -394,7 +394,7 @@ int schedule_task_push(Schedule_Event_List* schedule_working, Task* task, int sc
       }
     }
   }
-  //printf("[SCHEDULER] after conflict adjustment task %s at day %lu - %lu\n", task->task_name, task->day_start, task->day_end); 
+  // printf("[SCHEDULER] after conflict adjustment task %s at day %lu - %lu\n", task->task_name, task->day_start, task->day_end); 
 
   // store the task solution so it can be recreated later out of the best task
   schedule_working->qty += 1;
@@ -422,6 +422,7 @@ int schedule_task_pop(Schedule_Event_List* schedule_working){
 // how do you know when you are done? when all non trash tasks are scheduled
 // how do you know when to give up? TODO
 void schedule_solve_iter(Task_Memory* task_memory, Schedule_Event_List* schedule_best, Schedule_Event_List* schedule_working){
+
   // quit when all tasks have been scheduled
   if (task_memory->allocation_used - schedule_working->qty == 0){
 
@@ -459,12 +460,12 @@ void schedule_solve_iter(Task_Memory* task_memory, Schedule_Event_List* schedule
     return; 
   }
 
-  Task* task;
+  // try to schedule a task that has all dependents or prereqs scheduled
   for (size_t t=0; t<task_memory->allocation_total; ++t){
-    task = task_memory->tasks+t;
+    Task* task = task_memory->tasks+t;
 
     if ((task->trash == FALSE) & (task->schedule_done == FALSE)){
-      //printf("[SCHEDULER] considering task '%s'..\n", task->task_name);
+      // printf("[SCHEDULER] considering task '%s'..\n", task->task_name);
       int schedule_shift_dir = 0;
 
       // detect if all dependents are scheduled
@@ -476,7 +477,7 @@ void schedule_solve_iter(Task_Memory* task_memory, Schedule_Event_List* schedule
           }
         }
         if (dependents_scheduled == task->dependent_qty){
-          //printf("       all dependents for %s are scheduled.\n", task->task_name);
+          // printf("       all dependents for %s are scheduled.\n", task->task_name);
           schedule_shift_dir = -1;
         }
       }
@@ -489,15 +490,14 @@ void schedule_solve_iter(Task_Memory* task_memory, Schedule_Event_List* schedule
           }
         }
         if (prereqs_scheduled == task->prereq_qty){
-          //printf("       all prereqs for %s are scheduled.\n", task->task_name);
+          // printf("       all prereqs for %s are scheduled.\n", task->task_name);
           schedule_shift_dir = 1;
         }
       }
 
-
       // if either.. then try scheduling this task
       if (schedule_shift_dir != 0){
-        //printf("       adding to the schedule\n");
+        // printf("       adding to the schedule\n");
         int pushed = schedule_task_push(schedule_working, task_memory->tasks+t, schedule_shift_dir);
         if (pushed == FAILURE){ // is this the right option? will there be an infinite loop?
           continue;
@@ -506,7 +506,7 @@ void schedule_solve_iter(Task_Memory* task_memory, Schedule_Event_List* schedule
         // recursion
         schedule_solve_iter(task_memory, schedule_best, schedule_working);
 
-        //printf("   back up a level\n");
+        // printf("   back up a level\n");
 
         // if you come out of that.. then that path was no good or looking for an alternate solution
         schedule_task_pop(schedule_working);
@@ -514,9 +514,45 @@ void schedule_solve_iter(Task_Memory* task_memory, Schedule_Event_List* schedule
     }
   }
 
+  // if this point is reached, it means it was impossible to schedule without making any guesses
+  // just guess each non schedule task at a time, and try to schedule
+  for (size_t t=0; t<task_memory->allocation_total; ++t){
+    Task* task = task_memory->tasks + t;
+    
+    if ((task->trash == FALSE) && (task->schedule_done == FALSE)){
+      // printf("Activating the schedule guess function! adding %s\n", task->task_name);
+
+      // see if it is better to post or pre schedule
+      int schedule_shift_dir = 0;
+      for (size_t t=0; t<task->dependent_qty; ++t){
+        if (task->dependents[t]->schedule_done == FALSE){
+          schedule_shift_dir += 1;
+        }
+      }
+      for (size_t t=0; t<task->prereq_qty; ++t){
+        if (task->prereqs[t]->schedule_done == FALSE){
+          schedule_shift_dir -= 1;
+        }
+      }
+      if (schedule_shift_dir >= 0){
+        schedule_shift_dir = 1;
+      }
+      else{
+        schedule_shift_dir = -1;
+      }
+
+      int pushed = schedule_task_push(schedule_working, task, schedule_shift_dir);
+      if (pushed == SUCCESS){
+        // recursion
+        schedule_solve_iter(task_memory, schedule_best, schedule_working);
+      }
+      else{
+        schedule_task_pop(schedule_working);
+      }
+    }
+  } // end testing each possible alternate task
 
   // TODO island detection....
-
 }
 
 
@@ -537,6 +573,7 @@ int schedule_solve(Task_Memory* task_memory, Schedule_Event_List* schedule_best,
   }
 
   // pre-process some constraints
+  // TODO check for direct conflicts in these
   for (size_t t=0; t<task_memory->allocation_total; ++t){
     if ((tasks[t].schedule_constraints & (SCHEDULE_CONSTRAINT_END | SCHEDULE_CONSTRAINT_START)) > 0){
       // schedule this fixed constraint task
