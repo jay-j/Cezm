@@ -17,8 +17,8 @@
 // other files within this project
 #include "schedule.h"
 #include "keyboard_bindings.h"
-#include "utilities-c/hash_lib/hashtable.h"
-#include "font_bitmap.h"
+#include "lib/hashtable.h"
+#include "lib/font_bitmap.h"
 
 // global
 #define WINDOW_WIDTH_INIT 1600
@@ -783,7 +783,7 @@ void sdl_startup(SDL_Window** win, SDL_Renderer** render){
   if (SDL_GetNumVideoDisplays() > 1){ // TODO HACK for stream
     SDL_Rect monitor;
     SDL_GetDisplayBounds(1, &monitor);
-    *win = SDL_CreateWindow("[unnamed project planning software]", 
+    *win = SDL_CreateWindow("Cezm - Realtime project planning", 
       monitor.x, monitor.y,
       WINDOW_WIDTH_INIT, WINDOW_HEIGHT_INIT, SDL_WINDOW_OPENGL | SDL_WINDOW_SHOWN | SDL_WINDOW_ALLOW_HIGHDPI | SDL_WINDOW_RESIZABLE);
   }

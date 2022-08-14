@@ -2,11 +2,11 @@ CFLAGS = -O0 -Wall -Wextra -g -Werror
 
 # for Linux
 LIB_BUILTIN = -lSDL2 -lm -lSDL2_ttf -lSDL2_image
-LIB = schedule.h keyboard_bindings.h utilities-c/hash_lib/hashtable.h font_bitmap.h
-LIBOBJ = utilities-c/hash_lib/hashtable.o font_bitmap.o
+LIB = schedule.h keyboard_bindings.h lib/hashtable.h lib/font_bitmap.h
+LIBOBJ = lib/hashtable.o lib/font_bitmap.o
 
-all: main.bin font_example_render.bin font_convert.bin
-	./font_convert.bin Hack_Font.ttf 14
+all: main.bin lib/font_example_render.bin lib/font_convert.bin
+	./lib/font_convert.bin ./lib/Ubuntu-R.ttf 14
 	./main.bin examples/demo1.json
 
 %.bin: %.o $(LIBOBJ)

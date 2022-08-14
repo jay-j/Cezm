@@ -1,6 +1,6 @@
 #include <SDL2/SDL.h>
 #include <stdint.h>
-#include "utilities-c/hash_lib/hashtable.h"
+#include "lib/hashtable.h"
 
 #define FALSE 0
 #define TRUE 1
