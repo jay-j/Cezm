@@ -7,13 +7,14 @@
 typedef struct {
    int steps;
    int step_current;
-   double* coefficients;
-   double* history;
+   int* coefficients;
+   int* history;
+   int sum;
 } SmoothDelayInfo;
 
-SmoothDelayInfo profile_smoothdelay_setup(int steps, double initial_value);
+SmoothDelayInfo profile_smoothdelay_setup(int steps, int initial_value);
 
-double profile_smoothdelay_smooth(SmoothDelayInfo* profile, double curent_raw);
+int profile_smoothdelay_smooth(SmoothDelayInfo* profile, int curent_raw);
 
 void profile_smoothdelay_free(SmoothDelayInfo* profile);
 

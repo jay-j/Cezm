@@ -3,31 +3,28 @@
 //        in response to step input, output equals input after [steps]
 // Can be good for teleoperation applications, since behavior is very predictable
 //        and does still permit aggressive changes
+// Caution: rewritten for use with integer output application (e.g. pixels in screen space)
 
 
 // Create the structure, allocate interior variables, and initialize the delay size
-SmoothDelayInfo profile_smoothdelay_setup(int steps, double initial_value){
+SmoothDelayInfo profile_smoothdelay_setup(int steps, int initial_value){
    SmoothDelayInfo profile;
    profile.step_current = 0;
    profile.steps = steps;
+   profile.sum = 0;
 
    // init the coefficients. 
-   profile.coefficients = (double*) malloc(profile.steps * sizeof( *profile.coefficients));
-   double sum = 0;
+   profile.coefficients = (int*) malloc(profile.steps * sizeof( *profile.coefficients));
    
    // coefficients are a parabola in velocity space; constant acceleration
    for (int i=0; i<profile.steps; ++i){
-      double t = (double) i;
-      profile.coefficients[i] = -(t + 1)*(t - (double) profile.steps);
-      sum += profile.coefficients[i];
-   }
-   // normalize. sum(coefficients) = 1 
-   for (int i=0; i<profile.steps; ++i){
-      profile.coefficients[i] /= sum;
+      int t = (int) i;
+      profile.coefficients[i] = -(t + 1)*(t - (int) profile.steps);
+      profile.sum += profile.coefficients[i];
    }
 
    // initialize the input history array
-   profile.history = (double*) malloc(profile.steps * sizeof( *profile.history));
+   profile.history = (int*) malloc(profile.steps * sizeof( *profile.history));
    for (int i=0; i<profile.steps; ++i){
       profile.history[i] = initial_value;
    }
@@ -38,11 +35,11 @@ SmoothDelayInfo profile_smoothdelay_setup(int steps, double initial_value){
 
 // updates history with the new input, spits out a new filterred value
 // CAUTION - relies on the calling loop to operate at a constant frequency
-double profile_smoothdelay_smooth(SmoothDelayInfo* profile, double current_raw){
+int profile_smoothdelay_smooth(SmoothDelayInfo* profile, int current_raw){
    profile->history[profile->step_current] = current_raw;
 
    // discrete convolution integral. 
-   double result = 0;
+   int result = 0;
    for(int history_index=0; history_index<profile->steps; ++history_index){
       int profile_index = history_index - profile->step_current - 1;
 
@@ -57,6 +54,7 @@ double profile_smoothdelay_smooth(SmoothDelayInfo* profile, double current_raw){
       // actually compute the integral
       result += profile->coefficients[profile_index] * profile->history[history_index];
    }   
+   result /= profile->sum;
 
    // advance the current step, wrap as needed
    profile->step_current = (profile->step_current + 1) % profile->steps;
@@ -76,7 +74,7 @@ void profile_smoothdelay_free(SmoothDelayInfo* profile){
 void profile_smoothdelay_print_coefficients(SmoothDelayInfo* profile){
    printf("Profile Coefficients: %d\n", profile->steps);
    for(int i=0; i<profile->steps; ++i){
-      printf("%lf  ", profile->coefficients[i]);
+      printf("%d  ", profile->coefficients[i]);
    }
    printf("\n");
 }

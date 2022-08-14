@@ -958,10 +958,10 @@ Viewport_Active_Border viewport_active_border_setup(SDL_Rect init, size_t profil
 // during interpolation, the active border must hold together as a rectangle
 // so profile x,y,w,h instead of the vertices directly
 void viewport_active_border_profile_increment(Viewport_Active_Border* border){
-  border->current.x = (int) profile_smoothdelay_smooth(&border->profile_x, (double) border->target.x);
-  border->current.y = (int) profile_smoothdelay_smooth(&border->profile_y, (double) border->target.y);
-  border->current.w = (int) profile_smoothdelay_smooth(&border->profile_w, (double) border->target.w);
-  border->current.h = (int) profile_smoothdelay_smooth(&border->profile_h, (double) border->target.h);
+  border->current.x = profile_smoothdelay_smooth(&border->profile_x, border->target.x);
+  border->current.y = profile_smoothdelay_smooth(&border->profile_y, border->target.y);
+  border->current.w = profile_smoothdelay_smooth(&border->profile_w, border->target.w);
+  border->current.h = profile_smoothdelay_smooth(&border->profile_h, border->target.h);
 }
 
 
