@@ -15,7 +15,7 @@ SDL2
 Linux: `$ make`. Will generate an executable `main.bin`. Run this with the schedule filename as an required command line argument.
 
 # Usage
-The left pane is the `edit vieport`. The right pane is the `display viewport`. Switch modes with `TAB` (the default shortuct. See [keyboard_bindings.h](keyboard_bindings.h) to view and change).
+The left pane is the `edit viewport`. The right pane is the `display viewport`. Switch modes with `TAB` (the default shortuct. See [keyboard_bindings.h](keyboard_bindings.h) to view and change).
 
 In the `edit viewport`, describe the project in a json-like syntax (see [examples/demo1.json](examples/demo1.json)). The schedule will be solved as you type, and tasks will be plotted in the `display viewport`.]
 - Rename a symbol with `F2`. This engages multicursor mode, exit it with `ESCAPE`.
