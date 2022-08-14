@@ -1557,6 +1557,7 @@ void editor_symbol_rename(Task_Memory* task_memory, User_Memory* user_memory, Te
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 
+// TODO this function is way too long and should be divided up for readability and scope control
 int main(int argc, char* argv[]){
   // parse the input filename
   if (argc != 2){
@@ -2589,7 +2590,7 @@ int main(int argc, char* argv[]){
         char* line_start = text_buffer->text;
         char* line_end = NULL; 
         char* text_buffer_end = text_buffer->text + text_buffer->length;
-        int line_height_offset = 0;
+        int line_height_offset = viewport_active_border.border_width * 2;
 
         for(int line_number=0; line_number<text_buffer->lines; ++line_number){
           line_end = line_start + text_buffer->line_length[line_number];
@@ -2643,12 +2644,12 @@ int main(int argc, char* argv[]){
 
             // render the line!
             if (color_draft == 1){ // TODO the logic of this seems to be inverted
-              SDL_Rect dst = {0, line_height_offset, viewport_editor.w, viewport_editor.h};
+              SDL_Rect dst = {viewport_active_border.border_width*2, line_height_offset, viewport_editor.w, viewport_editor.h};
               SDL_Color color = {0, 0, 0, 0xFF};
               fontmap_render_string(render, dst, &font_normal, color, line_start, text_buffer->line_length[line_number], FONT_ALIGN_H_LEFT | FONT_ALIGN_V_TOP);
             }
             else{
-              SDL_Rect dst = {0, line_height_offset, viewport_editor.w, viewport_editor.h};
+              SDL_Rect dst = {viewport_active_border.border_width*2, line_height_offset, viewport_editor.w, viewport_editor.h};
               SDL_Color color = {128, 128, 128, 0xFF};
               fontmap_render_string(render, dst, &font_normal, color, line_start, text_buffer->line_length[line_number], FONT_ALIGN_H_LEFT | FONT_ALIGN_V_TOP); // TODO restore the colors
             }
@@ -2705,7 +2706,7 @@ int main(int argc, char* argv[]){
       SDL_Color color = {0, 0, 0, 0xFF};
       for(size_t i=0; i<user_memory->allocation_total; ++i){
         if (user_memory->users[i].trash == FALSE){
-          SDL_Rect dst = {user_memory->users[i].column_center_px - display_user_column_width/2, 0, display_user_column_width, font_normal.map.max_height};
+          SDL_Rect dst = {user_memory->users[i].column_center_px - display_user_column_width/2, viewport_active_border.border_width * 2, display_user_column_width, font_normal.map.max_height};
           
           // TODO need to compute width for center-alignment
           fontmap_render_string(render, dst, &font_normal, color, user_memory->users[i].name, user_memory->users[i].name_length, FONT_ALIGN_H_CENTER | FONT_ALIGN_V_TOP);
